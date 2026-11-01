@@ -13,7 +13,7 @@ revoke their assistant connections.
    whether the session, consent and workspace access still allow the connection.
 3. A typed tool exchanges the incoming token for a short-lived API delegation
    bound to that grant and tool.
-4. The workspace endpoint rechecks the source grant and organisation, retains
+4. The named API endpoint rechecks the source grant and organisation, retains
    the tool-access audit record and returns a bounded projection.
 5. Go checks that the returned user and organisation match the request's identity
    before returning the tool result.
@@ -56,3 +56,25 @@ bodies or credentials. Diagnostic liveness is separate from authentication.
 AuthRail MCP does not contain a policy engine or execute the customer's protected
 business tools. Runtime authorization remains with the customer's SDK, protected
 executor and local AuthRail sidecar.
+
+## Governance visibility
+
+A workspace-only grant cannot discover or call governance tools. The person
+explicitly selects governance reads during consent. Increasing the resource’s
+supported capability list does not change existing tokens or consent records.
+The backend merges that code-owned list into the OAuth resource configuration
+while preserving its disabled flag and other operator settings.
+
+Framework navigation uses the owning Framework repository, exact selected
+versions and bounded cursor pages. Readiness uses a read-only repeatable-read
+transaction over saved assessments. The backend checks the person’s readiness,
+Control and Policy access, including contributors outside the requested page
+and contributors retained in the assessment manifest. It withholds assessments
+whose audience cannot be established. Missing, stale or recalculating results
+remain unavailable. No tool writes product state or manufactures readiness.
+
+Connection reads have their own consent scope, connections.read, and retain the
+existing connection.read domain permission. The projection selects status and
+health inputs only; credentials, account boundaries and provider bodies are not
+loaded for tool output. Pagination is workspace-bound and capped at ten entries.
+These reads neither contact a provider nor enqueue collection work.

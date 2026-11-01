@@ -10,12 +10,19 @@ import (
 	"net/http"
 	"net/url"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
 
 // Scope allows the connection and workspace identity tools.
 const Scope = "workspace.read"
+
+// GovernanceScope permits governance reads, subject to the user’s domain permissions.
+const GovernanceScope = "governance.read"
+
+// ConnectionsScope permits saved Connection status reads with the user’s permission.
+const ConnectionsScope = "connections.read"
 const maxResponse = 64 << 10
 
 type traceContextKey struct{}
@@ -120,6 +127,15 @@ func (b *Backend) call(ctx context.Context, method, path, bearer, org string, in
 		return errBackend
 	}
 	defer res.Body.Close()
+	if res.StatusCode == http.StatusForbidden {
+		return errors.New("Your connection or account does not have permission to read this information")
+	}
+	if res.StatusCode == http.StatusNotFound {
+		return errors.New("This record is unavailable in the connected workspace")
+	}
+	if res.StatusCode == http.StatusBadRequest || res.StatusCode == http.StatusUnprocessableEntity {
+		return errors.New("AuthRail did not accept these arguments; check the record IDs or restart pagination")
+	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return errBackend
 	}
@@ -166,8 +182,21 @@ func (b *Backend) Workspace(ctx context.Context, token, tool string, identity Id
 	if err != nil || result.User.ID != identity.UserID || result.Organisation.ID != identity.OrganisationID {
 		return Workspace{}, errBackend
 	}
-	if len(result.Permissions) != 1 || result.Permissions[0] != Scope {
+	if !sameScopes(result.Permissions, identity.Scopes) {
 		return Workspace{}, errBackend
 	}
 	return result, nil
+}
+
+// We compare the API’s effective capabilities with the live introspection result.
+func sameScopes(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for _, scope := range a {
+		if !slices.Contains(b, scope) {
+			return false
+		}
+	}
+	return slices.Contains(a, Scope)
 }

@@ -19,8 +19,8 @@ type connection struct {
 	Scopes       []string      `json:"scopes"`
 }
 
-// Handler serves MCP requests and checks each connection with AuthRail.
-func Handler(backend *Backend) http.Handler {
+// We expose only the tool groups consented to by this request’s identity.
+func toolServer(backend *Backend, identity Identity) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{Name: "authrail-mcp", Version: "0.1.0"}, nil)
 	annotations := &mcp.ToolAnnotations{ReadOnlyHint: true}
 	mcp.AddTool(server, &mcp.Tool{Name: "authrail_get_workspace_summary", Description: "Read the organisation and account authorised for this AuthRail connection.", Annotations: annotations},
@@ -36,11 +36,25 @@ func Handler(backend *Backend) http.Handler {
 			if err != nil {
 				return nil, connection{}, err
 			}
-			return nil, connection{ClientID: identity.ClientID, Organisation: workspace.Organisation, User: workspace.User, Scopes: []string{Scope}}, nil
+			return nil, connection{ClientID: identity.ClientID, Organisation: workspace.Organisation, User: workspace.User, Scopes: identity.Scopes}, nil
 		})
+	if slices.Contains(identity.Scopes, GovernanceScope) {
+		addFrameworkTools(server, backend)
+	}
+	if slices.Contains(identity.Scopes, ConnectionsScope) {
+		addConnectionTools(server, backend)
+	}
+	return server
+}
+
+// Handler serves MCP requests and checks each connection with AuthRail.
+func Handler(backend *Backend) http.Handler {
 	resource, _ := url.Parse(backend.resource)
 	metadataURL := resource.Scheme + "://" + resource.Host + "/.well-known/oauth-protected-resource/mcp"
-	transport := mcp.NewStreamableHTTPHandler(func(*http.Request) *mcp.Server { return server }, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
+	transport := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
+		_, identity := requestIdentity(r.Context())
+		return toolServer(backend, identity)
+	}, &mcp.StreamableHTTPOptions{Stateless: true, JSONResponse: true})
 	protected := auth.RequireBearerToken(func(ctx context.Context, token string, _ *http.Request) (*auth.TokenInfo, error) {
 		identity, err := backend.Introspect(ctx, token)
 		if err != nil {
@@ -57,7 +71,7 @@ func Handler(backend *Backend) http.Handler {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"resource": backend.resource, "authorization_servers": []string{backend.issuer}, "scopes_supported": []string{Scope}, "bearer_methods_supported": []string{"header"}, "resource_name": "AuthRail"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"resource": backend.resource, "authorization_servers": []string{backend.issuer}, "scopes_supported": []string{Scope, GovernanceScope, ConnectionsScope}, "bearer_methods_supported": []string{"header"}, "resource_name": "AuthRail"})
 	})
 	mux.HandleFunc("/health/live", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {

@@ -14,8 +14,27 @@ behalf; it has no direct database access or shared administrator account.
 | --- | --- |
 | `authrail_get_connection` | The connected account, workspace, client and granted access. |
 | `authrail_get_workspace_summary` | The workspace and account names and their effective MCP capabilities. |
+| `authrail_list_organisation_frameworks` | A page of selected Frameworks and their exact versions. |
+| `authrail_get_organisation_framework` | One selected Framework’s version, status and revision. |
+| `authrail_get_framework_readiness` | Saved readiness and a page of applicable Obligations, within your content permissions. |
+| `authrail_list_connections` | Provider Connection names and saved health, with pagination. |
+| `authrail_get_connection_status` | One provider Connection’s saved status and last successful collection time. |
 
-Both tools require `workspace.read`. They accept an empty arguments object.
+The identity tools require `workspace.read` and accept an empty arguments object.
+Framework tools also require `governance.read`, which you select on the consent
+screen. Your workspace role and content permissions still apply. Existing
+workspace-only connections do not gain governance access automatically.
+
+Provider Connection tools require a separate `connections.read` choice. Ask your
+assistant which connections need attention, then inspect one result by ID.
+These tools report saved status; they do not start collection, connect to a
+provider, reveal its credentials or change its access. Connection health does
+not establish that a Test passed or a Framework is ready.
+
+For example, ask your assistant to list your organisation’s custom Frameworks,
+then inspect one Framework’s readiness. It follows the selected Framework ID and
+pagination cursor returned by AuthRail; you do not supply an organisation ID.
+A restricted or unevaluated assessment is shown as unavailable, never as ready.
 Access is rechecked for each request. Revoking the connection, signing out or
 losing workspace membership stops access.
 

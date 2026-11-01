@@ -78,3 +78,19 @@ existing connection.read domain permission. The projection selects status and
 health inputs only; credentials, account boundaries and provider bodies are not
 loaded for tool output. Pagination is workspace-bound and capped at ten entries.
 These reads neither contact a provider nor enqueue collection work.
+
+## Follow the verification owner
+
+Mapping reads reuse the Control mapping domain’s actor and subject visibility
+rules. They return bounded navigation metadata, never raw blocker or provenance
+payloads. Restricted references are withheld and the result identifies incomplete
+coverage. Version reads use the exact requested Control version and its audience;
+they do not substitute a draft or introduce a new universal read capability.
+
+Test and Evidence Requirement reads resolve the same verification owner used by
+the dashboard, including scoped Implementation boundaries. They query only safe
+summary fields. Test freshness uses the domain’s existing assessment function;
+Runtime-linked summaries also check Runtime visibility. Evidence Requirements
+remain separate from accepted proof and retained files. Tool-specific cursors
+bind the tenant and exact owner. These reads do not record proof, mutate workflow
+state or invoke external providers.

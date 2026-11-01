@@ -17,6 +17,10 @@ behalf; it has no direct database access or shared administrator account.
 | `authrail_list_organisation_frameworks` | A page of selected Frameworks and their exact versions. |
 | `authrail_get_organisation_framework` | One selected Framework’s version, status and revision. |
 | `authrail_get_framework_readiness` | Saved readiness and a page of applicable Obligations, within your content permissions. |
+| `authrail_list_control_mappings` | Visible mappings for one exact Obligation decision, including their lifecycle. |
+| `authrail_get_control` | Metadata for the exact Control version named by a mapping. |
+| `authrail_list_tests` | Test definitions, latest reported outcomes and freshness for an exact owner. |
+| `authrail_list_evidence_requirements` | The proof requirements for an exact Control owner. |
 | `authrail_list_connections` | Provider Connection names and saved health, with pagination. |
 | `authrail_get_connection_status` | One provider Connection’s saved status and last successful collection time. |
 
@@ -37,6 +41,13 @@ pagination cursor returned by AuthRail; you do not supply an organisation ID.
 A restricted or unevaluated assessment is shown as unavailable, never as ready.
 Access is rechecked for each request. Revoking the connection, signing out or
 losing workspace membership stops access.
+
+To investigate a readiness result, ask the assistant to follow an Obligation’s
+mappings. A mapping identifies the exact Control version to inspect. Its Tests
+show recorded outcomes and freshness; Evidence Requirements describe what proof
+the team expects. A requirement is not accepted Evidence, and a Test result does
+not independently verify a provider effect. Restricted results are incomplete
+and must not be treated as full coverage.
 
 ## Build and run
 

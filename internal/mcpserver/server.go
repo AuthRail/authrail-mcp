@@ -40,6 +40,7 @@ func toolServer(backend *Backend, identity Identity) *mcp.Server {
 		})
 	if slices.Contains(identity.Scopes, GovernanceScope) {
 		addFrameworkTools(server, backend)
+		addControlTools(server, backend)
 	}
 	if slices.Contains(identity.Scopes, ConnectionsScope) {
 		addConnectionTools(server, backend)

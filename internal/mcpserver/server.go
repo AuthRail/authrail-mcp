@@ -3,12 +3,13 @@ package mcpserver
 import (
 	"context"
 	"encoding/json"
-	"github.com/modelcontextprotocol/go-sdk/auth"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"net/http"
 	"net/url"
 	"slices"
 	"strings"
+
+	"github.com/modelcontextprotocol/go-sdk/auth"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type noArguments struct{}
@@ -23,6 +24,7 @@ type connection struct {
 func toolServer(backend *Backend, identity Identity) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{Name: "authrail-mcp", Version: "0.1.0"}, nil)
 	annotations := &mcp.ToolAnnotations{ReadOnlyHint: true}
+	addIntegrationTools(server, backend)
 	mcp.AddTool(server, &mcp.Tool{Name: "authrail_get_workspace_summary", Description: "Read the organisation and account authorised for this AuthRail connection.", Annotations: annotations},
 		func(ctx context.Context, _ *mcp.CallToolRequest, _ noArguments) (*mcp.CallToolResult, Workspace, error) {
 			token, identity := requestIdentity(ctx)
@@ -41,6 +43,7 @@ func toolServer(backend *Backend, identity Identity) *mcp.Server {
 	if slices.Contains(identity.Scopes, GovernanceScope) {
 		addFrameworkTools(server, backend)
 		addControlTools(server, backend)
+		addHistoryTools(server, backend)
 	}
 	if slices.Contains(identity.Scopes, ConnectionsScope) {
 		addConnectionTools(server, backend)

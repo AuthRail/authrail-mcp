@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-// Scope allows the connection and workspace identity tools.
+// Scope permits connection identity and released integration guidance.
 const Scope = "workspace.read"
 
 // GovernanceScope permits governance reads, subject to the user’s domain permissions.

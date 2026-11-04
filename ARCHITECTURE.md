@@ -94,3 +94,17 @@ Runtime-linked summaries also check Runtime visibility. Evidence Requirements
 remain separate from accepted proof and retained files. Tool-specific cursors
 bind the tenant and exact owner. These reads do not record proof, mutate workflow
 state or invoke external providers.
+
+Policy navigation checks Policy read permission and the exact version audience,
+as well as Control visibility when following Policy bases. Distinct version
+pages keep repeated sections bounded without loading document JSON. Version
+metadata includes discard and review timestamps; it never selects a newer draft.
+
+History readers resolve the exact verification owner before reading the Test
+or Evidence Requirement version. Queries select safe metadata rather than raw
+inputs, attestations or review reasons. Runtime-linked Test Run history requires
+Runtime visibility; Evidence metadata flags restricted Runtime sources without
+revealing their IDs. Record-review reads retain the exact Record binding and
+revision/status. Cursor bindings include the tool and the definition/requirement/
+record, keeping one history’s cursor out of another. No read calls storage,
+creates signed URLs, records proof or replays a human decision.

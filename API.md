@@ -19,6 +19,11 @@ The identity tools accept `{}`. Every tool rejects arguments outside its input s
 | `authrail_get_control` | `control` with the exact requested version’s metadata |
 | `authrail_list_tests` | Exact owner, `evaluatedAt`, Test records with nullable latest run and assessment, `pageInfo` |
 | `authrail_list_evidence_requirements` | Exact owner, requirement metadata and `pageInfo` |
+| `authrail_list_control_policy_bases` | Exact Control owner, distinct Policy version metadata, `restricted`, `pageInfo` |
+| `authrail_get_policy_version` | `policyVersion` identity, lifecycle, revision and review timestamps |
+| `authrail_list_test_runs` | Exact `definitionVersionId`, recorded run metadata, `pageInfo` |
+| `authrail_list_evidence_records` | Exact `requirementId`, Record metadata and source restrictions, `pageInfo` |
+| `authrail_list_evidence_record_decisions` | Exact requirement/record revision and state, retained decision metadata, `pageInfo` |
 | `authrail_list_connections` | `records`, `pageInfo: {hasNextPage, nextCursor}` |
 | `authrail_get_connection_status` | `connection` with provider names, status and saved health |
 
@@ -116,6 +121,66 @@ record. Expected-proof text, attestations, retained file keys, content and
 signed download URLs are excluded. None of these tools records a result,
 accepts proof, changes a mapping or recalculates readiness.
 
+## Policy references and retained history
+
+These tools require `governance.read`. Policy reads additionally require
+`policy.read` and the exact Policy version’s audience. Reading a Control’s Policy
+references also checks that Control version’s audience. Evidence history retains
+`evidence.read`; Test history resolves the exact verification owner and checks
+Runtime visibility before disclosing a Runtime-linked Test’s runs.
+
+`authrail_list_control_policy_bases` accepts `controlId`, `controlVersionId`,
+optional `limit` from 1–10 and `cursor`. Multiple linked sections of the same
+Policy version appear as one version reference. The result excludes section
+text and identifies incomplete visibility with `restricted: true`.
+
+```json
+{
+  "policyId":"5265ecde-8f3d-4b6d-8aa6-3f032bc91b01",
+  "policyVersionId":"e8dba20b-4bba-41a7-b0cb-8fa721b45bd3"
+}
+```
+
+Pass that exact pair from the references to `authrail_get_policy_version`.
+It returns catalog title/status and exact version number, status, revision,
+publication, review-due and discard timestamps. A newer draft is not substituted.
+Policy document bodies and private ownership details are excluded.
+
+```json
+{
+  "controlId":"e426c7b2-c1d1-4614-b9f9-ae9fd83f066f",
+  "controlVersionId":"1633c01f-a607-4bc5-91ae-bcb8056b9559",
+  "definitionId":"cc0171e0-356a-4ca4-9230-81b414575a99",
+  "limit":10
+}
+```
+
+Use `authrail_list_test_runs` with the Test list item’s **`id`** as `definitionId`.
+The item’s separate `definitionId` is its lineage, not the exact version record.
+Results contain recorded outcomes, periods, performance time and bounded
+evaluator metadata. They exclude inputs, explanations and provider data. An old
+passing run is not necessarily fresh or the latest applicable proof; use the
+Test summary and its freshness assessment for that question.
+
+For `authrail_list_evidence_records`, use the Evidence Requirement list item’s
+**`id`** as `requirementId`, alongside the same exact Control owner. The list’s
+separate `requirementId` is lineage, not the required version record. Record
+metadata includes source type, period, collection time, review status, revision
+and replacement reference. `sourceRestricted` identifies a linked Runtime source
+outside the reader’s visibility. Source IDs, contents, attestations and URLs are
+excluded. A review status does not establish source availability or provider effects.
+
+Pass a returned Record’s `id` as `recordId` to
+`authrail_list_evidence_record_decisions`, retaining all owner and requirement
+IDs. It returns retained decision IDs, decisions, reviewer staff references and
+timestamps, plus the Record’s saved status/revision. Private review reasons are
+excluded. Reading a retained decision never submits or replays it.
+
+All history lists accept `limit` 1–10 and `cursor`; verification histories also
+accept an exact optional `implementationVersionId`. Cursors bind the tenant,
+owner, tool and definition/requirement/record as applicable. They cannot be
+transferred between histories or used to switch to another version.
+
 ## Provider Connection arguments and results
 
 These tools require `connections.read` consent and the user’s `connection.read`
@@ -167,6 +232,11 @@ grant, never from tool arguments or caller-supplied tenant headers.
 | `GET /organisation/mcp/controls/:controlId/versions/:controlVersionId` | `authrail_get_control` delegation | Inspect exact version metadata. |
 | `GET /organisation/mcp/controls/:controlId/versions/:controlVersionId/tests` | `authrail_list_tests` delegation | Read bounded Test summaries. |
 | `GET /organisation/mcp/controls/:controlId/versions/:controlVersionId/evidence-requirements` | `authrail_list_evidence_requirements` delegation | Read bounded proof requirements. |
+| `GET /organisation/mcp/controls/:controlId/versions/:controlVersionId/policy-bases` | `authrail_list_control_policy_bases` delegation | Read visible exact Policy references. |
+| `GET /organisation/mcp/policies/:policyId/versions/:policyVersionId` | `authrail_get_policy_version` delegation | Read exact Policy version metadata. |
+| `GET /organisation/mcp/controls/:controlId/versions/:controlVersionId/tests/:definitionId/runs` | `authrail_list_test_runs` delegation | Read bounded recorded run history. |
+| `GET /organisation/mcp/controls/:controlId/versions/:controlVersionId/evidence-requirements/:requirementId/records` | `authrail_list_evidence_records` delegation | Read safe Evidence Record history. |
+| `GET /organisation/mcp/controls/:controlId/versions/:controlVersionId/evidence-requirements/:requirementId/records/:recordId/decisions` | `authrail_list_evidence_record_decisions` delegation | Read retained review metadata. |
 | `GET /organisation/mcp/connections` | `authrail_list_connections` delegation | Read a page of Connection status metadata. |
 | `GET /organisation/mcp/connections/:connectionId` | `authrail_get_connection_status` delegation | Read one Connection’s saved health. |
 

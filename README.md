@@ -21,6 +21,11 @@ behalf; it has no direct database access or shared administrator account.
 | `authrail_get_control` | Metadata for the exact Control version named by a mapping. |
 | `authrail_list_tests` | Test definitions, latest reported outcomes and freshness for an exact owner. |
 | `authrail_list_evidence_requirements` | The proof requirements for an exact Control owner. |
+| `authrail_list_control_policy_bases` | Distinct exact Policy versions referenced by a visible Control version. |
+| `authrail_get_policy_version` | One permitted Policy version’s lifecycle and review metadata. |
+| `authrail_list_test_runs` | Recorded run outcomes and periods for an exact Test version. |
+| `authrail_list_evidence_records` | Evidence Record periods, revisions and review states. |
+| `authrail_list_evidence_record_decisions` | Retained decisions, reviewer references and timestamps for one Record. |
 | `authrail_list_connections` | Provider Connection names and saved health, with pagination. |
 | `authrail_get_connection_status` | One provider Connection’s saved status and last successful collection time. |
 
@@ -48,6 +53,12 @@ show recorded outcomes and freshness; Evidence Requirements describe what proof
 the team expects. A requirement is not accepted Evidence, and a Test result does
 not independently verify a provider effect. Restricted results are incomplete
 and must not be treated as full coverage.
+
+The assistant can follow a Control’s Policy references or inspect its Test and
+Evidence history. Use the exact `id` returned by the definition/requirement list
+when requesting history. A past passing run can be stale, and an Evidence review
+decision does not independently prove a provider effect. History tools return
+safe metadata; they do not disclose document text, attestations or file links.
 
 ## Build and run
 

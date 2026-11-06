@@ -98,7 +98,7 @@ func NewBackend(config Config) (*Backend, error) {
 		client: &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}, nil
 }
 
-func (b *Backend) call(ctx context.Context, method, path, bearer, org string, input, output any) error {
+func (b *Backend) call(ctx context.Context, method, path, bearer, org string, input, output any, timeout ...time.Duration) error {
 	var body io.Reader
 	if input != nil {
 		data, err := json.Marshal(input)
@@ -122,19 +122,28 @@ func (b *Backend) call(ctx context.Context, method, path, bearer, org string, in
 	if org != "" {
 		req.Header.Set("X-Organisation-Id", org)
 	}
-	res, err := b.client.Do(req)
+	client := b.client
+	if len(timeout) == 1 && timeout[0] > 0 && timeout[0] <= 25*time.Second {
+		copy := *b.client
+		copy.Timeout = timeout[0]
+		client = &copy
+	}
+	res, err := client.Do(req)
 	if err != nil {
 		return errBackend
 	}
 	defer res.Body.Close()
 	if res.StatusCode == http.StatusForbidden {
-		return errors.New("Your connection or account does not have permission to read this information")
+		return errors.New("Your connection or account does not have permission for this task")
 	}
 	if res.StatusCode == http.StatusNotFound {
 		return errors.New("This record is unavailable in the connected workspace")
 	}
 	if res.StatusCode == http.StatusBadRequest || res.StatusCode == http.StatusUnprocessableEntity {
-		return errors.New("AuthRail did not accept these arguments; check the record IDs or restart pagination")
+		return errors.New("AuthRail did not accept these arguments; check the selected records and supplied values")
+	}
+	if res.StatusCode == http.StatusConflict {
+		return errors.New("The record changed or is not ready for this task; read and review its latest revision before retrying")
 	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return errBackend

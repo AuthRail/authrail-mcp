@@ -14,6 +14,7 @@ behalf; it has no direct database access or shared administrator account.
 | --- | --- |
 | `authrail_get_connection` | The connected account, workspace, client and granted access. |
 | `authrail_get_workspace_summary` | The workspace and account names and their effective MCP capabilities. |
+| `authrail_get_sdk_integrations` | Released Node.js, Go and Python installation paths and checked integration guidance. |
 | `authrail_list_organisation_frameworks` | A page of selected Frameworks and their exact versions. |
 | `authrail_get_organisation_framework` | One selected Framework’s version, status and revision. |
 | `authrail_get_framework_readiness` | Saved readiness and a page of applicable Obligations, within your content permissions. |
@@ -59,6 +60,41 @@ Evidence history. Use the exact `id` returned by the definition/requirement list
 when requesting history. A past passing run can be stale, and an Evidence review
 decision does not independently prove a provider effect. History tools return
 safe metadata; they do not disclose document text, attestations or file links.
+
+## Prepare a contextual Rail with your assistant
+
+Grant **Rail draft preparation** during connection consent, using an account
+that can manage Rails. This separate access does not get added to existing
+connections automatically. Then ask, for example:
+
+> Prepare a Guard Rail for our reviewed code-change action. Enable AuthRail
+> Contextual AI to block changes that weaken authentication. Show me the question
+> and exactly which fields would be sent to AuthRail before saving the draft.
+
+The assistant uses these tools as one preparation flow:
+
+| Tool | Purpose |
+| --- | --- |
+| `authrail_list_connected_actions` | Find the action to protect. |
+| `authrail_get_connected_action` | Read its exact reviewed version and permitted fields. |
+| `authrail_propose_contextual_rail` | Prepare an unsaved contextual assessment and rule. |
+| `authrail_create_guard_rail_draft` / `authrail_create_policy_rail_draft` | Create the appropriate unpublished draft. |
+| `authrail_get_rail_draft` | Read its content and revision before editing. |
+| `authrail_save_guard_rail_draft` / `authrail_save_policy_rail_draft` | Save an exact revision with its examples. |
+| `authrail_test_guard_rail_draft` / `authrail_test_policy_rail_draft` | Run those examples before human publication review. |
+
+Contextual AI is an AuthRail service enabled on the Rail that needs interpretation.
+You describe the business rule; AuthRail prepares its bounded assessment. Review
+the question, permitted material and answer that the rule uses. Your connected
+application sends that material through the SDK and sidecar to AuthRail. AuthRail
+returns a signed finding, and the local sidecar applies the deterministic rule.
+An uncertain answer never becomes permission. No model key or extractor setup is
+needed in your application or assistant.
+
+These tools use your ordinary workspace permissions. They cannot publish a Rail,
+approve a request or execute the business operation. A person reviews the exact
+tested version before publication. Connecting management MCP alone also does not
+protect another tool: the business function needs its SDK/sidecar boundary.
 
 ## Build and run
 

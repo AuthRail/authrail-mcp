@@ -48,6 +48,9 @@ func toolServer(backend *Backend, identity Identity) *mcp.Server {
 	if slices.Contains(identity.Scopes, ConnectionsScope) {
 		addConnectionTools(server, backend)
 	}
+	if slices.Contains(identity.Scopes, RuntimeDraftsScope) {
+		addRuntimeDraftTools(server, backend)
+	}
 	return server
 }
 
@@ -75,7 +78,7 @@ func Handler(backend *Backend) http.Handler {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"resource": backend.resource, "authorization_servers": []string{backend.issuer}, "scopes_supported": []string{Scope, GovernanceScope, ConnectionsScope}, "bearer_methods_supported": []string{"header"}, "resource_name": "AuthRail"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"resource": backend.resource, "authorization_servers": []string{backend.issuer}, "scopes_supported": []string{Scope, GovernanceScope, ConnectionsScope, RuntimeDraftsScope}, "bearer_methods_supported": []string{"header"}, "resource_name": "AuthRail"})
 	})
 	mux.HandleFunc("/health/live", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {

@@ -26,7 +26,7 @@ change another connection's selection.
 
 The backend uses Better Auth's OAuth provider for S256 PKCE, exact registered
 callbacks, authorization codes, opaque access tokens and rotating refresh tokens.
-Client registration exposes only a public PKCE client with bounded read access.
+Client registration exposes a public PKCE client with explicit bounded capabilities.
 Dynamic registration and arbitrary resource registration are disabled.
 
 The backend stores provider records in PostgreSQL and one-use authentication
@@ -71,7 +71,7 @@ transaction over saved assessments. The backend checks the person’s readiness,
 Control and Policy access, including contributors outside the requested page
 and contributors retained in the assessment manifest. It withholds assessments
 whose audience cannot be established. Missing, stale or recalculating results
-remain unavailable. No tool writes product state or manufactures readiness.
+remain unavailable. Governance read tools neither write product state nor manufacture readiness.
 
 Connection reads have their own consent scope, connections.read, and retain the
 existing connection.read domain permission. The projection selects status and
@@ -108,3 +108,18 @@ revealing their IDs. Record-review reads retain the exact Record binding and
 revision/status. Cursor bindings include the tool and the definition/requirement/
 record, keeping one history’s cursor out of another. No read calls storage,
 creates signed URLs, records proof or replays a human decision.
+
+## Rail draft preparation
+
+The optional runtime.drafts scope exposes action discovery, exact draft reads,
+contextual proposals and draft create/save/test tools. Consent is an access
+ceiling; the backend still checks live Rails and Policy permissions. Writes use
+the ordinary owning domain services, revision conflicts, idempotent creation and
+audit history. Successful preparations also retain the named-tool access record.
+No MCP publication or approval route exists in this group.
+
+A contextual proposal contains the assessment meaning, selected fields, typed
+answer and deterministic conditions. The hosted interpretation client and its
+operational configuration remain in the private server. Go does not receive a
+model credential or run the interpretation itself. Exact publication remains an
+authenticated human decision in the tenant workspace.

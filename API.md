@@ -27,8 +27,8 @@ The identity tools accept `{}`. Every tool rejects arguments outside its input s
 | `authrail_list_connections` | `records`, `pageInfo: {hasNextPage, nextCursor}` |
 | `authrail_get_connection_status` | `connection` with provider names, status and saved health |
 
-These tools read identity, selected Frameworks and stored readiness. They do not change governance
-records or execute business operations. Results exclude session IDs, tokens and
+The identity and governance tools read selected records without changing them.
+Rail preparation tools below can edit unpublished drafts; none executes a business operation. Results exclude session IDs, tokens and
 provider credentials. Workspace permissions in this projection describe MCP
 capabilities; they are not a grant of every organisation role permission.
 
@@ -254,3 +254,25 @@ arguments cannot expand the connection's access.
 
 `GET /health/live` checks process liveness. It does not establish user authority
 or a working connection to AuthRail.
+
+## Rail preparation tools
+
+These tools require explicit `runtime.drafts` consent in addition to
+`workspace.read`, plus the user's owning domain permissions.
+
+| Tool | Input and result |
+| --- | --- |
+| `authrail_list_connected_actions` | Optional `limit` 1–50 and `afterId`; returns `operations`. |
+| `authrail_get_connected_action` | `operationId`; returns the action and its exact versions. |
+| `authrail_get_rail_draft` | `railId`, `versionId`; returns exact version content, revision and review URL. |
+| `authrail_propose_contextual_rail` | `kind`, reviewed `operationVersionId`, business `instructions` and a published `policyVersionId` for Policy; returns unsaved assessment, rules and unresolved questions. |
+| `authrail_create_guard_rail_draft` | `name`, reviewed `operationVersionId`, UUID `idempotencyKey`; returns draft identity. |
+| `authrail_create_policy_rail_draft` | Same creation fields plus published `policyVersionId`. |
+| `authrail_save_guard_rail_draft` / `authrail_save_policy_rail_draft` | `railId`, `versionId`, expected `revision`, `name`, complete `content`; returns the saved draft and review URL. |
+| `authrail_test_guard_rail_draft` / `authrail_test_policy_rail_draft` | Exact draft IDs and `revision`; returns example results. |
+
+Creation retries reuse the same UUID only for identical content. After a revision
+conflict, read and reconcile the draft before saving again. Contextual assessment
+and examples are part of exact version content; saving invalidates an earlier
+test result. These tools cannot publish. Testing examples does not establish model
+accuracy, tool coverage or a provider effect.

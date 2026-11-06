@@ -276,3 +276,63 @@ conflict, read and reconcile the draft before saving again. Contextual assessmen
 and examples are part of exact version content; saving invalidates an earlier
 test result. These tools cannot publish. Testing examples does not establish model
 accuracy, tool coverage or a provider effect.
+
+## Customer-side protected MCP contract
+
+Hosted tools with `runtime.drafts` consent provide `authrail_get_protected_mcp_setup`,
+`authrail_create_connected_action_draft` and `authrail_save_connected_action_draft`.
+Preparation preserves UUID creation retries and exact expected revisions. The
+returned review link binds the organisation, Operation version and revision;
+an authenticated person confirms it in the tenant workspace. These tools cannot
+confirm an Operation, publish a Rail or activate a deployment.
+
+`authrail_get_runtime_action` requires separate `runtime.read` consent and exact
+`deploymentId` and `actionId`. It retains ordinary AI Inventory visibility and
+returns bounded Action/certificate/receipt metadata, truncation flags and a workspace
+link. Private signed assertions and approval review material are excluded.
+
+The separate `authrail-protected-mcp` command speaks stdio to the local agent and
+fixed authenticated Streamable HTTP to a reviewed downstream server. Its private
+`--config` references the existing sidecar setup directory, loopback address,
+authenticated principal/session, private state directory, downstream URL and token
+file, exact tool bindings and optional trusted Data readers. Configuration is
+operator-owned; tool arguments cannot select any of those values.
+
+`--inspect` performs bounded tool discovery without business calls. Use `--tool`
+to inspect one exact name and `--idempotency-field` to exclude the string argument
+owned by the connector for a write. Omit both to discover all candidates. It returns
+downstream schemas/digests and the normalised result shape to review as an
+AuthRail Operation. Neither an inspected description nor a schema creates or
+confirms an Operation. Only an exact confirmed version may be bound.
+
+`--bind --output <new-private-file>` matches chosen tools against exact contracts
+from the sidecar's verified selected Enforce bundle. Inputs, normalised result,
+resource field, effect category and idempotency must agree; ambiguous matches
+require an explicitly selected version. The operator must review the real
+function's business meaning. Binding creates private configuration without
+overwriting an installed file or executing a business tool.
+
+| Tool | Input | Result |
+| --- | --- | --- |
+| Each explicitly bound business name | `requestKey`, `arguments` matching its reviewed input, excluding the injected idempotency field | `status`, authenticated `deploymentId`, optional `actionId`, `approvalRequestId`, and checked `result: {text, data}` only after completion |
+| `authrail_continue_request` | Bound `tool`, original `requestKey` | Saved state, or checked result after exact approval and execution |
+| `authrail_get_saved_request` | Bound `tool`, original `requestKey` | Local state and linked AuthRail IDs; no private continuation, credential or cached business output |
+
+Results distinguish `blocked`, `awaiting_approval`, `claim_unknown`, `completed`,
+`result_withheld`, `outcome_unknown` and terminal review/reconciliation states.
+`checking` or `started` after a crash requires operator investigation. Repeating
+an existing key never starts the tool again. Changing arguments under that key
+fails. Use management MCP's authorised record tools to inspect AuthRail history;
+a local journal entry is not proof that a report reached the server.
+
+Approval status uses authenticated local `POST /approval-permits/status`.
+Its fresh Ed25519 proof has type `authrail.approval.status.v1` and binds the exact
+organisation, deployment, Action, approval, original input digest and executor
+fingerprint. It cannot be replayed as a permit claim. The sidecar forwards it
+with its deployment credential and returns bounded state/expiry metadata only.
+The SDK still owns permit claims, recovery and execution receipts.
+
+Only trusted embedding code can call `Connector.Reconcile` with a provider lookup
+using the retained recovery reference. No MCP tool accepts an agent's assertion
+that a payment succeeded, failed or should be retried. Unknown outcomes remain
+blocked until the operator establishes and records their actual outcome.

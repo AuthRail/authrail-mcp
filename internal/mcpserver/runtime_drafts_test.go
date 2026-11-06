@@ -111,6 +111,9 @@ func TestDataDraftToolsUseBoundedNamedRoutes(t *testing.T) {
 		name, method, path string
 		args               map[string]any
 	}{
+		{"authrail_get_protected_mcp_setup", http.MethodGet, "/organisation/mcp/integrations/protected-mcp", map[string]any{}},
+		{"authrail_create_connected_action_draft", http.MethodPost, "/organisation/mcp/rails/action-drafts", map[string]any{"idempotencyKey": sourceID, "key": "invoice.pay", "name": "Pay invoice", "contract": map[string]any{"summary": "Candidate for human review"}}},
+		{"authrail_save_connected_action_draft", http.MethodPatch, "/organisation/mcp/rails/actions/" + operationID + "/drafts/" + versionID, map[string]any{"operationId": operationID, "versionId": versionID, "revision": 7, "name": "Pay invoice", "contract": map[string]any{"summary": "Changed candidate for review"}}},
 		{"authrail_get_data_source_options", http.MethodGet, "/organisation/mcp/rails/data-source-options", map[string]any{}},
 		{"authrail_list_data_sources", http.MethodGet, "/organisation/mcp/rails/data-sources?afterId=" + sourceID + "&limit=10", map[string]any{"limit": 10, "afterId": sourceID}},
 		{"authrail_get_data_source", http.MethodGet, "/organisation/mcp/rails/data-sources/" + sourceID, map[string]any{"sourceId": sourceID}},
@@ -160,7 +163,7 @@ func TestDataDraftToolsUseBoundedNamedRoutes(t *testing.T) {
 					if r.Method == http.MethodPatch || tool == "authrail_test_data_rail_draft" {
 						var body map[string]any
 						_ = json.NewDecoder(r.Body).Decode(&body)
-						if body["revision"] != float64(7) || body["sourceId"] != nil || body["railId"] != nil || body["versionId"] != nil {
+						if body["revision"] != float64(7) || body["sourceId"] != nil || body["railId"] != nil || body["versionId"] != nil || body["operationId"] != nil {
 							t.Error("revision or path IDs were not translated correctly")
 						}
 					}
@@ -228,6 +231,78 @@ func TestDataDraftToolsUseBoundedNamedRoutes(t *testing.T) {
 				if calls.Load() != expected {
 					t.Fatal("invalid input reached backend")
 				}
+			}
+		})
+	}
+}
+
+// Record inspection requires its own consent; draft preparation must not silently disclose Runtime history.
+func TestRuntimeRecordReadHasSeparateConsent(t *testing.T) {
+	for _, allowed := range []bool{false, true} {
+		t.Run(map[bool]string{false: "draft-only", true: "record-consent"}[allowed], func(t *testing.T) {
+			var reads atomic.Int32
+			api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				switch r.URL.Path {
+				case "/auth/mcp/introspect":
+					scopes := []string{Scope, RuntimeDraftsScope}
+					if allowed {
+						scopes = append(scopes, RuntimeReadScope)
+					}
+					_ = json.NewEncoder(w).Encode(Identity{Active: true, UserID: "user-1", SessionID: "session-1", OrganisationID: "org-1", ClientID: "client-1", Scopes: scopes, ExpiresAt: time.Now().Add(time.Minute)})
+				case "/auth/mcp/delegations/exchange":
+					var input struct{ Token, Tool string }
+					_ = json.NewDecoder(r.Body).Decode(&input)
+					if !allowed || input.Tool != "authrail_get_runtime_action" {
+						t.Error("unexpected record delegation")
+					}
+					_ = json.NewEncoder(w).Encode(map[string]any{"accessToken": "record-delegation", "expiresAt": time.Now().Add(time.Minute)})
+				case "/organisation/mcp/runtime/deployments/00000000-0000-4000-8000-000000000001/actions/00000000-0000-4000-8000-000000000002":
+					if r.Method != http.MethodGet || r.Header.Get("Authorization") != "Bearer record-delegation" || r.Header.Get("X-Organisation-Id") != "org-1" {
+						t.Error("wrong record authority")
+					}
+					reads.Add(1)
+					_ = json.NewEncoder(w).Encode(map[string]any{"organisationId": "org-1", "userId": "user-1", "data": map[string]any{"action": map[string]any{"state": "succeeded"}}})
+				default:
+					t.Errorf("unexpected record route: %s", r.URL.Path)
+					w.WriteHeader(404)
+				}
+			}))
+			defer api.Close()
+			endpoint := httptest.NewUnstartedServer(nil)
+			resource := "http://" + endpoint.Listener.Addr().String() + "/mcp"
+			backend, err := NewBackend(Config{APIURL: api.URL, ResourceURL: resource, ServiceToken: strings.Repeat("s", 32), AllowLoopback: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			endpoint.Config.Handler = Handler(backend)
+			endpoint.Start()
+			defer endpoint.Close()
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			client, err := mcp.NewClient(&mcp.Implementation{Name: "verification", Version: "1"}, nil).Connect(ctx, &mcp.StreamableClientTransport{Endpoint: resource, HTTPClient: &http.Client{Transport: bearerTransport{strings.Repeat("u", 32)}}, DisableStandaloneSSE: true, MaxRetries: -1}, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer client.Close()
+			tools, err := client.ListTools(ctx, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			found := false
+			for _, tool := range tools.Tools {
+				found = found || tool.Name == "authrail_get_runtime_action"
+			}
+			if found != allowed {
+				t.Fatal("record discovery ignored separate consent")
+			}
+			result, err := client.CallTool(ctx, &mcp.CallToolParams{Name: "authrail_get_runtime_action", Arguments: map[string]any{"deploymentId": "00000000-0000-4000-8000-000000000001", "actionId": "00000000-0000-4000-8000-000000000002"}})
+			if allowed {
+				if err != nil || result.IsError || reads.Load() != 1 {
+					t.Fatalf("record read failed: %+v %v", result, err)
+				}
+			} else if reads.Load() != 0 || err == nil && !result.IsError {
+				t.Fatal("draft-only grant disclosed record")
 			}
 		})
 	}

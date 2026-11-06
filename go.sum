@@ -1,3 +1,5 @@
+github.com/AuthRail/authrail-sdk-go v0.0.0-20261106054729-dfd7802cc805 h1:vt7oZpF1LQMHRVwSP3pT0dyVwXnEhTsGEfpwBi1XcAc=
+github.com/AuthRail/authrail-sdk-go v0.0.0-20261106054729-dfd7802cc805/go.mod h1:GW81e1ErQDJU5h/twuNqLnJEirYScB67lEqSnGjL2fk=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/go-viper/mapstructure/v2 v2.4.0 h1:EBsztssimR/CONLSZZ04E8qAkxNYq4Qp9LvH92wZUgs=

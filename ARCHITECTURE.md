@@ -123,3 +123,62 @@ answer and deterministic conditions. The hosted interpretation client and its
 operational configuration remain in the private server. Go does not receive a
 model credential or run the interpretation itself. Exact publication remains an
 authenticated human decision in the tenant workspace.
+
+## Customer-side protected connector
+
+`cmd/authrail-protected-mcp` is a separate local stdio service. The hosted
+management process remains a server-API client. The `protectedmcp` package uses
+the Go Runtime SDK and the customer's loopback sidecar; it contains no evaluator.
+It connects to one fixed authenticated Streamable HTTP business-tool server.
+Bearer credentials stay in owner-only files. Redirects and tool-call retries are
+disabled, and responses, schemas, discovery pages and request durations are bounded.
+
+The private operator configuration binds one authenticated application principal
+and session, reviewed Operation versions, exact downstream names/schema digests,
+resource ownership and business idempotency fields. `tools/list` metadata is draft
+input for that review, never permission. Discovery exposes only those bound tools.
+A write tool must have an application-owned idempotency field, resource binding
+and explicit review fields including its resource. The downstream implementation
+must honour that idempotency contract; a declaration cannot make an arbitrary
+provider safe. Resource ownership is resolved before checking the call and again
+before execution. A transformed argument cannot change the checked resource.
+
+The connector calls `Enforce` around the real downstream call. The SDK handles
+Guard/Data/contextual requirements, signing, retained start/completion reports,
+approval permission and result checks. The Operation's result contract is the
+normalised object `{text: string, data: object}`. Non-text content, interactive
+input requests and unreviewed output shapes are withheld. This integration is
+Enforce-only; it does not silently turn an Observe deployment into enforcement.
+AuthRail records permission and what the connector reports; it does not
+independently verify the downstream business effect.
+
+Private recovery state uses an AES-256-GCM journal, exclusive process ownership,
+atomic file replacement and file/directory synchronisation. A durable marker
+precedes every effect. The same request key is bound to the original arguments
+and reviewed configuration; replay returns metadata rather than rerunning the
+tool or releasing cached output. Keep the journal, its encryption key and the
+sidecar's complete state together through upgrades. Never clear them to retry.
+A process crash at an uncertain point requires operator investigation.
+
+Waiting approvals retain the SDK's original continuation encrypted on disk.
+Continue first reads exact approval state with a separate purpose-bound proof.
+Pending requests remain saved without consuming permission. Approved requests
+claim once through the SDK. A lost claim response can recover only its existing,
+unstarted, unexpired permit. Rejection, expiry, changed configuration or an
+unknown effect cannot trigger a fresh business call. No agent tool votes,
+extends review or submits reconciliation evidence. Trusted application code can
+use `Connector.Reconcile` after checking the provider with the original business
+idempotency key; recording that result never reruns the effect or releases output.
+
+The command reuses the keys and IDs created by sidecar setup. It loads supported
+Stripe, QuickBooks and fixed customer-API reader bindings from private settings;
+other named readers use the package's trusted application callbacks. API resource
+lookups bind the fixed principal and account and require an explicit freshness
+limit. Provider authentication/refresh remains customer-owned. No arbitrary SQL,
+MCP read tool or live provider access is inferred from a source label.
+
+The agent must reach this connector instead of the equivalent direct business
+connection. Keep downstream credentials and private files outside the agent's
+execution boundary. Filesystem permissions alone do not isolate a same-user
+agent with unrestricted host access. Neither this connector nor hosted management
+MCP proves that another route, shell or credential has been contained.

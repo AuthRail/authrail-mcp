@@ -55,6 +55,12 @@ type testRailInput struct {
 
 func addRuntimeDraftTools(server *mcp.Server, backend *Backend) {
 	annotations := &mcp.ToolAnnotations{ReadOnlyHint: true}
+	mcp.AddTool(server, &mcp.Tool{Name: "authrail_list_guard_protections", Description: "Read AuthRail's versioned built-in Guard protections: block_credentials_v1, redact_credentials_v1 and approved_destination_v1. Use the returned templates, exact reviewed action fields, supported formats and limitations to prepare an ordinary Guard draft. Save and test the draft, then ask a person to review publication. This tool does not activate a protection, publish a Rail or secure uninstrumented tools.", Annotations: annotations},
+		func(ctx context.Context, _ *mcp.CallToolRequest, _ noArguments) (*mcp.CallToolResult, map[string]any, error) {
+			token, identity := requestIdentity(ctx)
+			data, err := backend.runtimeDraft(ctx, token, "authrail_list_guard_protections", http.MethodGet, "/organisation/mcp/rails/guard-protections", nil, identity)
+			return nil, data, err
+		})
 	mcp.AddTool(server, &mcp.Tool{Name: "authrail_list_connected_actions", Description: "Find connected actions in your workspace before preparing a contextual Rail. Read the selected action to choose its exact reviewed Operation Version and permitted fields. This does not connect a provider or intercept a function.", Annotations: annotations},
 		func(ctx context.Context, _ *mcp.CallToolRequest, input connectedActionListInput) (*mcp.CallToolResult, map[string]any, error) {
 			if input.Limit < 0 || input.Limit > 50 || input.AfterID != "" && !frameworkID.MatchString(input.AfterID) {

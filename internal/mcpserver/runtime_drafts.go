@@ -54,6 +54,7 @@ type testRailInput struct {
 }
 
 func addRuntimeDraftTools(server *mcp.Server, backend *Backend) {
+	addDataDraftTools(server, backend)
 	annotations := &mcp.ToolAnnotations{ReadOnlyHint: true}
 	mcp.AddTool(server, &mcp.Tool{Name: "authrail_list_guard_protections", Description: "Choose a built-in Guard for a reviewed request or result field: recognised credentials, common email formats, Luhn-valid payment-card formats, unconditional field withholding, approved destination values, or a contextual assessment of instruction manipulation or sensitive disclosure. Read the returned templates and exact limitations; these are distinct protections, not universal sensitive-data or prompt-injection detection. Local processing runs before permitted contextual disclosure. A contextual preset needs explicit Rail-owned Contextual AI enablement and a reviewed boolean assessment; uncertainty never becomes clearance. Prepare paired deny/allow conditions as the template describes and bind the exact reviewed fields. Save and test the draft, then ask a person to review publication. This tool does not activate a protection, publish a Rail or secure uninstrumented tools.", Annotations: annotations},
 		func(ctx context.Context, _ *mcp.CallToolRequest, _ noArguments) (*mcp.CallToolResult, map[string]any, error) {

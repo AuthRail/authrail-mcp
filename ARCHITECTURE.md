@@ -118,6 +118,26 @@ the ordinary owning domain services, revision conflicts, idempotent creation and
 audit history. Successful preparations also retain the named-tool access record.
 No MCP publication or approval route exists in this group.
 
+Deployment management and assigned approvals have separate optional consent
+groups (`runtime.deployments` and `runtime.approvals`). The Go service exchanges
+the current user's token for each exact named backend tool. Deployment reads and
+Observe installation creation reuse Runtime's visibility, permission and
+idempotency contracts. Setup exposes only public metadata. No hosted tool issues
+executor credentials or evaluates a customer call.
+
+Reserved deployment changes and approval decisions return signed ten-minute
+proposals. Their purpose-separated signature binds the exact user, organisation,
+target, request fields and expected sequence or immutable review hash. Preparing
+a proposal changes no Runtime state. Its browser fragment avoids sending the
+proposal through page request URLs. Cookie-only human preview/confirmation rejects
+Authorization headers and requires the configured frontend origin. The human
+reads the exact proposed Rail content or assigned review context and explicitly
+confirms; Enforce also needs the operator's boundary assertion. Confirmation
+rechecks live domain access and state, then uses the existing domain transaction.
+An approval's expected context hash is checked under its decision lock. MCP
+receives only minimal assigned-request metadata, never application review context.
+No new customer record type, hosted executor or durable proposal store is created.
+
 A contextual proposal contains the assessment meaning, selected fields, typed
 answer and deterministic conditions. The hosted interpretation client and its
 operational configuration remain in the private server. Go does not receive a

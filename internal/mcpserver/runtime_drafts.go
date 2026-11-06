@@ -147,8 +147,12 @@ func addRuntimeDraftTools(server *mcp.Server, backend *Backend) {
 }
 
 func (b *Backend) runtimeDraft(ctx context.Context, token, tool, method, path string, input any, identity Identity) (map[string]any, error) {
-	if !slices.Contains(identity.Scopes, RuntimeDraftsScope) {
-		return nil, errors.New("Reconnect with Rail draft preparation consent and an account that can manage Rails")
+	return b.delegatedCall(ctx, token, tool, method, path, RuntimeDraftsScope, input, identity)
+}
+
+func (b *Backend) delegatedCall(ctx context.Context, token, tool, method, path, scope string, input any, identity Identity) (map[string]any, error) {
+	if !slices.Contains(identity.Scopes, scope) {
+		return nil, errors.New("Reconnect with the required consent and your account's permission for this task")
 	}
 	var delegation struct {
 		AccessToken string    `json:"accessToken"`

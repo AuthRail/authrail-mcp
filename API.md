@@ -277,6 +277,42 @@ and examples are part of exact version content; saving invalidates an earlier
 test result. These tools cannot publish. Testing examples does not establish model
 accuracy, tool coverage or a provider effect.
 
+## Deployment and assigned approval tools
+
+`runtime.deployments` is separate consent for `authrail_list_deployments`,
+`authrail_create_deployment`, `authrail_get_deployment`,
+`authrail_get_deployment_setup` and `authrail_get_deployment_rail_selection`.
+Lists use exact Inventory item IDs, an optional UUID cursor and limit at most 100.
+Creation needs a name and UUID idempotency key and prepares only an Observe
+installation. It does not issue a credential, confirm identity or select Rails.
+Read/setup responses contain metadata, fingerprints and connection status, never
+private keys, plaintext credentials or private signed bundles. Domain visibility
+and AI Inventory read/manage and Rail publish permissions remain authoritative.
+
+`authrail_request_deployment_activation` and
+`authrail_request_deployment_renewal` take exact deployment/request IDs, expected
+sequence and Rail version IDs; activation also selects Observe or Enforce.
+`authrail_request_deployment_rollback` adds an exact retained source bundle and
+reason; `authrail_request_deployment_revocation` takes a reason. Rollback and
+revocation are Observe-only. These tools return ten-minute human review links
+and apply no change. The originating account signs in to review the exact proposed
+versions, mode and impact. Enforce activation and renewal require that human's
+explicit protected-tool and credential-isolation confirmation. Agents cannot
+supply this assertion. Changed state, expired proposals or lost permissions fail
+closed and require a fresh review. The domain transaction retains its original
+CAS and idempotency checks.
+
+Separate `runtime.approvals` consent exposes
+`authrail_list_my_runtime_approvals` (up to 30 pending requests, optional UUID
+cursor) and `authrail_request_runtime_approval_decision`. The list returns only
+assigned-request metadata and its immutable review hash, without the application's
+review context or requester identity. Preparing a decision requires the exact
+request ID, hash and approve/reject/cancel choice. It returns a human review link;
+it never casts a vote. Only the exact authenticated named reviewer can read the
+context and confirm the decision in AuthRail. No AI Inventory or publication
+permission is added to this reviewer path. Approval does not resume a business
+callback; the protected application retains that responsibility.
+
 ## Customer-side protected MCP contract
 
 Hosted tools with `runtime.drafts` consent provide `authrail_get_protected_mcp_setup`,

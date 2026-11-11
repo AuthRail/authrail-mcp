@@ -26,8 +26,12 @@ change another connection's selection.
 
 The backend uses Better Auth's OAuth provider for S256 PKCE, exact registered
 callbacks, authorization codes, opaque access tokens and rotating refresh tokens.
-Client registration exposes a public PKCE client with explicit bounded capabilities.
-Dynamic registration and arbitrary resource registration are disabled.
+Client identity supports HTTPS Client ID Metadata Documents (CIMD), dynamic
+registration and account-owned pre-registration. The backend bounds capabilities
+and links clients only to the configured MCP resource. Registration never grants
+organisation access or bypasses signed-in consent. CIMD retrieval uses the
+provider's DNS-pinned public-network transport and rejects redirects; discovered
+client provenance is persisted. Arbitrary resource registration is disabled.
 
 The backend stores provider records in PostgreSQL and one-use authentication
 state in Redis. Access token storage uses SHA-256 hashes. The source browser

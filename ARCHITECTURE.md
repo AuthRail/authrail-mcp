@@ -1,208 +1,147 @@
 # AuthRail MCP architecture
 
-The Go service translates named MCP tools into AuthRail API calls. AuthRail's
-server owns sign-in, consent, tenant membership, permissions and audit history.
-The tenant client supplies the sign-in and consent screens and lets a person
-revoke their assistant connections.
+The Go service connects assistants to AuthRail through named tools. The AuthRail
+API owns identity, permissions, business rules and durable records. The tenant
+client provides sign-in, consent and exact human review.
 
-## Request flow
+[API.md](API.md) lists implemented endpoints and tools. The shared product story
+and plan describe the intended hosted MCP/A2A path; the gateway and hosted
+execution path are not implemented by the current management listener.
 
-1. The MCP client obtains a resource-bound OAuth token through AuthRail sign-in
-   and consent for one organisation.
-2. We ask AuthRail to validate the token on every HTTP request. This checks
-   whether the session, consent and workspace access still allow the connection.
-3. A typed tool exchanges the incoming token for a short-lived API delegation
-   bound to that grant and tool.
-4. The named API endpoint rechecks the source grant and organisation, retains
-   the tool-access audit record and returns a bounded projection.
-5. Go checks that the returned user and organisation match the request's identity
-   before returning the tool result.
+```mermaid
+flowchart LR
+    Assistant -->|OAuth and named tools| MCP[AuthRail MCP]
+    MCP -->|Introspection and exact tool delegation| API[AuthRail API]
+    API --> PostgreSQL
+    Human -->|Sign-in, consent and review| Client[Tenant client]
+    Client --> API
+```
 
-The transport is stateless. It does not retain browser sessions, tokens or
-workspace selections between requests. A request to one organisation cannot
-change another connection's selection.
+## Ownership
 
-## Authentication ownership
+| Component | Owns |
+| --- | --- |
+| AuthRail API | OAuth grants, live membership, domain permissions, draft changes, human decisions and audit records |
+| MCP listener | Streamable HTTP, consent-based tool discovery and typed tool dispatch |
+| Backend client | Fixed API paths, exact tool delegation, bounded calls and response identity checks |
+| Tenant client | Human sign-in, organisation choice, consent, revocation and review |
+| Local protected connector | Reviewed business-tool bindings, execution through the Go SDK and private recovery state |
+| Sidecar | Published Rail verification and request/result evaluation |
 
-The backend uses Better Auth's OAuth provider for S256 PKCE, exact registered
-callbacks, authorization codes, opaque access tokens and rotating refresh tokens.
-Client identity supports HTTPS Client ID Metadata Documents (CIMD), dynamic
-registration and account-owned pre-registration. The backend bounds capabilities
-and links clients only to the configured MCP resource. Registration never grants
-organisation access or bypasses signed-in consent. CIMD retrieval uses the
-provider's DNS-pinned public-network transport and rejects redirects; discovered
-client provenance is persisted. Arbitrary resource registration is disabled.
+## An assistant request
 
-The backend stores provider records in PostgreSQL and one-use authentication
-state in Redis. Access token storage uses SHA-256 hashes. The source browser
-session, consent and membership are checked when a token is used. A delegated
-API credential expires within one minute and never outlives its source token
-or session. It is not accepted as a browser or Runtime deployment credential.
+The assistant signs in and receives an OAuth token bound to one organisation and
+the configured MCP resource. Each HTTP request asks the API to validate that token
+against its source session, consent and live membership. The organisation comes
+from this authenticated grant, never from tool arguments.
 
-The private service credential authenticates Go to the introspection/exchange
-endpoints. It supplies no user or tenant permission by itself. The API delegation
-is a separate, purpose-bound credential; raw resource tokens do not reach tenant
-API routes.
+The listener exposes only consented tool groups. A tool exchanges the token for
+a short-lived delegation bound to that exact named tool. The owning API endpoint
+rechecks current authority and applies its normal business transaction. The Go
+client verifies the returned user and organisation before disclosing the result.
+The private service credential authenticates introspection and exchange; it
+supplies no customer permission by itself.
 
-## Process and network boundary
+The management transport is stateless. It does not retain workspace choices or
+business execution state between requests. The current resource uses `/mcp`.
+Changing to the planned public root entry requires listener, OAuth resource,
+audience, discovery and client settings to change together.
 
-The listener runs behind HTTPS ingress. We use koanf to load the API URL, public
-MCP URL, OAuth issuer and listener address from the environment. Explicit
-command-line flags override those values. Addresses require HTTPS;
-HTTP loopback development needs explicit opt-in. A private owner-readable file
-or injected deployment secret supplies the service credential. Graceful shutdown
-allows in-flight requests to finish within a bounded deadline.
+## Authentication and transport
 
-Backend responses are bounded to 64 KiB, redirects are rejected, and returned
-identity is checked before disclosure. Tool failures do not expose raw provider
-bodies or credentials. Diagnostic liveness is separate from authentication.
+The API owns OAuth authorization codes, S256 PKCE, exact callbacks, opaque access
+tokens and rotating refresh tokens. It supports registered clients, HTTPS client
+metadata and bounded dynamic registration. Client registration does not grant
+organisation access. Provider records live in PostgreSQL; one-use authentication
+state uses Redis. Stored access tokens are hashed.
 
-AuthRail MCP does not contain a policy engine or execute the customer's protected
-business tools. Runtime authorization remains with the customer's SDK, protected
-executor and local AuthRail sidecar.
+Delegations expire within one minute and do not outlive the source grant. They
+are not browser or Runtime deployment credentials. Requests validate the listener
+Host and browser Origin. Native clients may omit Origin. HTTPS is required except
+for explicitly enabled loopback development.
 
-## Governance visibility
+API requests use fixed routes, deadlines, no redirects and a 64 KiB response
+limit. Incoming management bodies are also bounded to 64 KiB. Errors exclude raw
+backend bodies and credentials. Liveness says the process is serving requests;
+it does not establish account access or protected execution.
 
-A workspace-only grant cannot discover or call governance tools. The person
-explicitly selects governance reads during consent. Increasing the resource’s
-supported capability list does not change existing tokens or consent records.
-The backend merges that code-owned list into the OAuth resource configuration
-while preserving its disabled flag and other operator settings.
+## Drafts, decisions and history
 
-Framework navigation uses the owning Framework repository, exact selected
-versions and bounded cursor pages. Readiness uses a read-only repeatable-read
-transaction over saved assessments. The backend checks the person’s readiness,
-Control and Policy access, including contributors outside the requested page
-and contributors retained in the assessment manifest. It withholds assessments
-whose audience cannot be established. Missing, stale or recalculating results
-remain unavailable. Governance read tools neither write product state nor manufacture readiness.
+Draft preparation uses the owning domain services, stable creation keys and
+expected revisions. A conflicting save requires rereading and reconciling the
+draft. Action and source drafts need human review; Rail drafts need exact human
+publication. Contextual AI preparation runs through the API without exposing
+model credentials to Go or customer configuration.
 
-Connection reads have their own consent scope, connections.read, and retain the
-existing connection.read domain permission. The projection selects status and
-health inputs only; credentials, account boundaries and provider bodies are not
-loaded for tool output. Pagination is workspace-bound and capped at ten entries.
-These reads neither contact a provider nor enqueue collection work.
+Reserved deployment changes and approval decisions return signed, ten-minute
+review proposals. Preparing a proposal changes no deployment or vote. Its browser
+link binds the account, organisation, exact request and expected state. Only the
+authenticated person can confirm it. Confirmation rechecks live permissions and
+uses the owning domain transaction. Enforce confirmation includes the person's
+protected-boundary assertion. Approval grants permission; it does not execute or
+resume a business callback.
 
-## Follow the verification owner
+Reads use bounded projections and exact-version audience checks. Verification
+history retains its Control or scoped Implementation owner. Missing, stale,
+restricted or recalculating assessments remain unavailable. Connection health
+reads use saved collection status and do not call providers. Tokens, provider
+credentials, private assertions and application approval material are excluded
+from ordinary tool results.
 
-Mapping reads reuse the Control mapping domain’s actor and subject visibility
-rules. They return bounded navigation metadata, never raw blocker or provenance
-payloads. Restricted references are withheld and the result identifies incomplete
-coverage. Version reads use the exact requested Control version and its audience;
-they do not substitute a draft or introduce a new universal read capability.
+## Hosted execution direction
 
-Test and Evidence Requirement reads resolve the same verification owner used by
-the dashboard, including scoped Implementation boundaries. They query only safe
-summary fields. Test freshness uses the domain’s existing assessment function;
-Runtime-linked summaries also check Runtime visibility. Evidence Requirements
-remain separate from accepted proof and retained files. Tool-specific cursors
-bind the tenant and exact owner. These reads do not record proof, mutate workflow
-state or invoke external providers.
+The hosted path reuses the sidecar's Go evaluation engine. The API coordinates
+that check and retains permission through one calling operation: resolve current
+authority and versions, evaluate outside the database transaction, then recheck
+and retain the decision/attempt atomically. The API does not evaluate Rails again.
+Rule caches stay in sidecar memory; durable work belongs in PostgreSQL.
 
-Policy navigation checks Policy read permission and the exact version audience,
-as well as Control visibility when following Policy bases. Distinct version
-pages keep repeated sections bounded without loading document JSON. Version
-metadata includes discard and review timestamps; it never selects a newer draft.
+The private gateway adapter translates protocol requests/results into those
+contracts and sends permitted work through agentgateway using the reviewed account
+credential. It is not another agent or policy engine. Result checks precede
+information release; execution outcomes are retained separately from permission.
 
-History readers resolve the exact verification owner before reading the Test
-or Evidence Requirement version. Queries select safe metadata rather than raw
-inputs, attestations or review reasons. Runtime-linked Test Run history requires
-Runtime visibility; Evidence metadata flags restricted Runtime sources without
-revealing their IDs. Record-review reads retain the exact Record binding and
-revision/status. Cursor bindings include the tool and the definition/requirement/
-record, keeping one history’s cursor out of another. No read calls storage,
-creates signed URLs, records proof or replays a human decision.
+Business response deadlines are one minute. An overdue attempt triggers provider
+status reconciliation with its original identity, not a replacement write. Pending
+human work stays saved; fresh facts and short-lived permits govern later execution.
+The current local connector below still has its existing journal/expiry behavior.
+These hosted contracts are intended work, not implemented management-listener tools.
 
-## Rail draft preparation
+## Local protected execution
 
-The optional runtime.drafts scope exposes action discovery, exact draft reads,
-contextual proposals and draft create/save/test tools. Consent is an access
-ceiling; the backend still checks live Rails and Policy permissions. Writes use
-the ordinary owning domain services, revision conflicts, idempotent creation and
-audit history. Successful preparations also retain the named-tool access record.
-No MCP publication or approval route exists in this group.
+`authrail-protected-mcp` is a separate stdio command. Private operator configuration
+binds one application principal/session, a fixed authenticated downstream server,
+reviewed Operation versions, schema digests and resource ownership. Discovery is
+input to review, not execution authority. Write bindings require a stable business
+idempotency field that the downstream implementation actually honours.
 
-Deployment management and assigned approvals have separate optional consent
-groups (`runtime.deployments` and `runtime.approvals`). The Go service exchanges
-the current user's token for each exact named backend tool. Deployment reads and
-Observe installation creation reuse Runtime's visibility, permission and
-idempotency contracts. Setup exposes only public metadata. No hosted tool issues
-executor credentials or evaluates a customer call.
+The connector verifies the binding, resolves the resource and calls the Go SDK's
+`Enforce` around the real downstream tool. The SDK coordinates Guard/Data/contextual
+checks, approval permits and execution reports. Result checks run before disclosure.
+Non-text content, interactive input requests and unreviewed shapes are withheld.
+An execution report records what the connector reported, not independent proof of
+the provider's effect.
 
-Reserved deployment changes and approval decisions return signed ten-minute
-proposals. Their purpose-separated signature binds the exact user, organisation,
-target, request fields and expected sequence or immutable review hash. Preparing
-a proposal changes no Runtime state. Its browser fragment avoids sending the
-proposal through page request URLs. Cookie-only human preview/confirmation rejects
-Authorization headers and requires the configured frontend origin. The human
-reads the exact proposed Rail content or assigned review context and explicitly
-confirms; Enforce also needs the operator's boundary assertion. Confirmation
-rechecks live domain access and state, then uses the existing domain transaction.
-An approval's expected context hash is checked under its decision lock. MCP
-receives only minimal assigned-request metadata, never application review context.
-No new customer record type, hosted executor or durable proposal store is created.
+## Local recovery
 
-A contextual proposal contains the assessment meaning, selected fields, typed
-answer and deterministic conditions. The hosted interpretation client and its
-operational configuration remain in the private server. Go does not receive a
-model credential or run the interpretation itself. Exact publication remains an
-authenticated human decision in the tenant workspace.
+An encrypted journal retains request arguments, reviewed bindings and approval
+continuations. Exclusive process ownership, per-request locks and atomic synced
+writes protect it. A durable marker precedes dispatch. Reusing a key with changed
+arguments fails; replay does not repeat the tool or release cached output.
 
-## Customer-side protected connector
+A waiting request checks exact approval status before claiming permission. A lost
+claim response can recover only an existing unstarted, unexpired permit. Rejection,
+expiry or an uncertain effect cannot start a replacement call. Trusted application
+code may reconcile retained work using a provider lookup with the original business
+identity. An agent cannot submit its own reconciliation claim.
 
-`cmd/authrail-protected-mcp` is a separate local stdio service. The hosted
-management process remains a server-API client. The `protectedmcp` package uses
-the Go Runtime SDK and the customer's loopback sidecar; it contains no evaluator.
-It connects to one fixed authenticated Streamable HTTP business-tool server.
-Bearer credentials stay in owner-only files. Redirects and tool-call retries are
-disabled, and responses, schemas, discovery pages and request durations are bounded.
+Keep the journal, encryption key and sidecar state through upgrades. A crash at an
+uncertain transition needs investigation; deleting state is not recovery. These
+local files are not a shared hosted store. The hosted design uses PostgreSQL for
+business execution and continuation ownership while gateway protocol sessions
+have their own routing and recovery contract.
 
-The private operator configuration binds one authenticated application principal
-and session, reviewed Operation versions, exact downstream names/schema digests,
-resource ownership and business idempotency fields. `tools/list` metadata is draft
-input for that review, never permission. Discovery exposes only those bound tools.
-A write tool must have an application-owned idempotency field, resource binding
-and explicit review fields including its resource. The downstream implementation
-must honour that idempotency contract; a declaration cannot make an arbitrary
-provider safe. Resource ownership is resolved before checking the call and again
-before execution. A transformed argument cannot change the checked resource.
-
-The connector calls `Enforce` around the real downstream call. The SDK handles
-Guard/Data/contextual requirements, signing, retained start/completion reports,
-approval permission and result checks. The Operation's result contract is the
-normalised object `{text: string, data: object}`. Non-text content, interactive
-input requests and unreviewed output shapes are withheld. This integration is
-Enforce-only; it does not silently turn an Observe deployment into enforcement.
-AuthRail records permission and what the connector reports; it does not
-independently verify the downstream business effect.
-
-Private recovery state uses an AES-256-GCM journal, exclusive process ownership,
-atomic file replacement and file/directory synchronisation. A durable marker
-precedes every effect. The same request key is bound to the original arguments
-and reviewed configuration; replay returns metadata rather than rerunning the
-tool or releasing cached output. Keep the journal, its encryption key and the
-sidecar's complete state together through upgrades. Never clear them to retry.
-A process crash at an uncertain point requires operator investigation.
-
-Waiting approvals retain the SDK's original continuation encrypted on disk.
-Continue first reads exact approval state with a separate purpose-bound proof.
-Pending requests remain saved without consuming permission. Approved requests
-claim once through the SDK. A lost claim response can recover only its existing,
-unstarted, unexpired permit. Rejection, expiry, changed configuration or an
-unknown effect cannot trigger a fresh business call. No agent tool votes,
-extends review or submits reconciliation evidence. Trusted application code can
-use `Connector.Reconcile` after checking the provider with the original business
-idempotency key; recording that result never reruns the effect or releases output.
-
-The command reuses the keys and IDs created by sidecar setup. It loads supported
-Stripe, QuickBooks and fixed customer-API reader bindings from private settings;
-other named readers use the package's trusted application callbacks. API resource
-lookups bind the fixed principal and account and require an explicit freshness
-limit. Provider authentication/refresh remains customer-owned. No arbitrary SQL,
-MCP read tool or live provider access is inferred from a source label.
-
-The agent must reach this connector instead of the equivalent direct business
-connection. Keep downstream credentials and private files outside the agent's
-execution boundary. Filesystem permissions alone do not isolate a same-user
-agent with unrestricted host access. Neither this connector nor hosted management
-MCP proves that another route, shell or credential has been contained.
+Provider credentials remain outside the agent's execution boundary. An equivalent
+direct tool route can bypass the connector. The system must remove or block that
+route before claiming enforcement; filesystem permissions alone do not contain
+an unrestricted agent running as the same operating-system user.

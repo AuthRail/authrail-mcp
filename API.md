@@ -1,374 +1,221 @@
 # AuthRail MCP API
 
-The Go service exposes Streamable HTTP at `/mcp`. The official MCP SDK handles
-protocol negotiation, tool discovery and typed calls. Requests require an OAuth
-bearer token for this resource with `workspace.read` access.
+## HTTP endpoints
 
-## Tools
+Send authenticated MCP JSON-RPC requests over Streamable HTTP.
+`POST /mcp`
 
-The identity tools accept `{}`. Every tool rejects arguments outside its input schema.
+Read OAuth protected-resource metadata.
+`GET /.well-known/oauth-protected-resource/mcp`
 
-| Tool | Structured result |
-| --- | --- |
-| `authrail_get_connection` | `clientId`, `organisation: {id, name}`, `user: {id, name}`, `scopes` |
-| `authrail_get_workspace_summary` | `organisation: {id, name}`, `user: {id, name}`, `permissions` |
-| `authrail_list_organisation_frameworks` | `frameworks`, `pageInfo: {hasNextPage, nextCursor}` |
-| `authrail_get_organisation_framework` | `organisationFramework` with exact version, status and revision |
-| `authrail_get_framework_readiness` | `organisationFramework`, `scopeSnapshotId`, `assessmentStatus`, `restricted`, `recalculating`, nullable `readiness`, `obligations`, `pageInfo` |
-| `authrail_list_control_mappings` | Exact Framework/Obligation references, `restricted`, bounded `records`, `pageInfo` |
-| `authrail_get_control` | `control` with the exact requested version’s metadata |
-| `authrail_list_tests` | Exact owner, `evaluatedAt`, Test records with nullable latest run and assessment, `pageInfo` |
-| `authrail_list_evidence_requirements` | Exact owner, requirement metadata and `pageInfo` |
-| `authrail_list_control_policy_bases` | Exact Control owner, distinct Policy version metadata, `restricted`, `pageInfo` |
-| `authrail_get_policy_version` | `policyVersion` identity, lifecycle, revision and review timestamps |
-| `authrail_list_test_runs` | Exact `definitionVersionId`, recorded run metadata, `pageInfo` |
-| `authrail_list_evidence_records` | Exact `requirementId`, Record metadata and source restrictions, `pageInfo` |
-| `authrail_list_evidence_record_decisions` | Exact requirement/record revision and state, retained decision metadata, `pageInfo` |
-| `authrail_list_connections` | `records`, `pageInfo: {hasNextPage, nextCursor}` |
-| `authrail_get_connection_status` | `connection` with provider names, status and saved health |
+Check process liveness.
+`GET /health/live`
 
-The identity and governance tools read selected records without changing them.
-Rail preparation tools below can edit unpublished drafts; none executes a business operation. Results exclude session IDs, tokens and
-provider credentials. Workspace permissions in this projection describe MCP
-capabilities; they are not a grant of every organisation role permission.
+## MCP tools
 
-## Framework arguments and results
+All tools require `workspace.read`. The headings identify additional consent.
+The API also checks current organisation permissions and access to each record.
+Tool input and result schemas are supplied by MCP discovery and the typed
+registrations in [internal/mcpserver](internal/mcpserver).
 
-The three Framework tools require `governance.read` in addition to `workspace.read`.
-This is an optional consent choice, not a replacement for domain permissions.
-Tool discovery reflects the connection’s granted scopes; the API checks them
-again when a tool runs.
+### Workspace — `workspace.read`
 
-```json
-{"source":"custom","limit":10}
-```
+Inspect the assistant connection and its consented access.
+`authrail_get_connection`
 
-Use `source: "authrail"` for managed Frameworks or `"custom"` for organisation-
-authored Frameworks. List pages allow 1–20 entries. Pass `pageInfo.nextCursor` as
-`cursor` to continue. Framework names and version labels are bounded; an entry
-reports `projectionTruncated` when text was shortened. Document bodies are not
-part of this navigation result.
+Read the connected organisation and account.
+`authrail_get_workspace_summary`
 
-```json
-{"organisationFrameworkId":"f221769a-4df6-45c9-9cd0-2668fbd86e20"}
-```
+Read released SDK installation guidance.
+`authrail_get_sdk_integrations`
 
-Both detail and readiness use the selected `organisationFrameworkId` returned
-by the list, rather than the catalogue’s Framework ID. Readiness also accepts
-`limit` from 1–10 and its own `cursor`. The readiness cursor belongs to the exact
-workspace, Framework and Scope Snapshot; restart pagination after scope changes.
+### Accounts — `connections.read`
 
-Readiness is read from saved assessments, without triggering a recalculation.
-`assessmentStatus` explains whether it is `available`, `restricted`,
-`recalculating`, `stale`, `not_evaluated` or `inactive`. Unavailable assessments
-have `readiness: null`. Restricted contributors anywhere in the Framework can
-withhold its aggregate assessment, including contributors outside the page.
-Obligation entries have their own assessment status. Safe blocker codes omit
-record IDs and private explanations; `blockersTruncated` reports omitted reasons.
+List provider Connections and their saved health.
+`authrail_list_connections`
 
-## Follow an Obligation into verification
+Read one provider Connection’s saved status.
+`authrail_get_connection_status`
 
-These four tools require `governance.read`. Mappings additionally require the
-workspace’s `framework.select` permission. Control and Test reads use the
-domain’s membership and exact-version audience rules. Evidence Requirements additionally
-require `evidence.read`.
+### Actions and Rails — `runtime.drafts`
 
-```json
-{
-  "organisationFrameworkId":"f221769a-4df6-45c9-9cd0-2668fbd86e20",
-  "obligationApplicabilityDecisionId":"b92e5139-a54f-44c5-a704-9ba08c4fb109",
-  "limit":10
-}
-```
+Read protected MCP connector setup guidance.
+`authrail_get_protected_mcp_setup`
 
-Pass those exact references from readiness to `authrail_list_control_mappings`.
-It returns visible mapping IDs, Control/version IDs, bounded Control titles,
-contributions, effective dates and lifecycle states. History is included; an
-ended, withdrawn, scheduled or review-required mapping is not active coverage.
-`restricted: true` means the visible list is incomplete. Hidden Control or scoped
-Implementation references are not disclosed by this projection. The list does
-not expose mapping rationale, private provenance or raw Health blockers.
+List connected action contracts.
+`authrail_list_connected_actions`
 
-```json
-{
-  "controlId":"e426c7b2-c1d1-4614-b9f9-ae9fd83f066f",
-  "controlVersionId":"1633c01f-a607-4bc5-91ae-bcb8056b9559"
-}
-```
+Read an action and its exact versions.
+`authrail_get_connected_action`
 
-Use these arguments with `authrail_get_control`. The version ID is required;
-AuthRail does not substitute the latest draft. The result contains Control and
-version lifecycle, version number, revision, title, purpose and effective dates.
-Statement, implementation and source bodies are excluded.
+Create an unconfirmed action draft.
+`authrail_create_connected_action_draft`
 
-Use the same owner IDs with `authrail_list_tests` or
-`authrail_list_evidence_requirements`. Both also accept an optional exact
-`implementationVersionId`, `limit` from 1–10 and `cursor`. Cursors are bound to
-the tenant, exact owner and tool; Test cursors cannot page Evidence Requirements.
-The owner result identifies its revision, status and whether it is operational.
-A draft’s definitions do not establish approved operational coverage.
+Save an action draft at its expected revision.
+`authrail_save_connected_action_draft`
 
-Test results contain definition/version IDs, a bounded title, cadence/freshness,
-a safe latest-run summary and the existing domain freshness assessment. Missing
-runs remain missing; failed and errored outcomes remain failed and errored.
-If a Runtime-linked Test is outside the user’s Runtime visibility, its title is
-restricted and its run/assessment are withheld. Procedures, run input and
-explanation text, Runtime payloads and provider responses are not returned.
+Read an exact Rail draft.
+`authrail_get_rail_draft`
 
-Evidence Requirements contain requirement/version IDs, title, source type,
-cadence, freshness and period. They describe expected proof, not an accepted
-record. Expected-proof text, attestations, retained file keys, content and
-signed download URLs are excluded. None of these tools records a result,
-accepts proof, changes a mapping or recalculates readiness.
+Read built-in Guard protections and their limits.
+`authrail_list_guard_protections`
 
-## Policy references and retained history
+Prepare an unsaved Contextual AI Rail proposal.
+`authrail_propose_contextual_rail`
 
-These tools require `governance.read`. Policy reads additionally require
-`policy.read` and the exact Policy version’s audience. Reading a Control’s Policy
-references also checks that Control version’s audience. Evidence history retains
-`evidence.read`; Test history resolves the exact verification owner and checks
-Runtime visibility before disclosing a Runtime-linked Test’s runs.
+Create a Guard Rail draft.
+`authrail_create_guard_rail_draft`
 
-`authrail_list_control_policy_bases` accepts `controlId`, `controlVersionId`,
-optional `limit` from 1–10 and `cursor`. Multiple linked sections of the same
-Policy version appear as one version reference. The result excludes section
-text and identifies incomplete visibility with `restricted: true`.
+Save a Guard Rail draft at its expected revision.
+`authrail_save_guard_rail_draft`
 
-```json
-{
-  "policyId":"5265ecde-8f3d-4b6d-8aa6-3f032bc91b01",
-  "policyVersionId":"e8dba20b-4bba-41a7-b0cb-8fa721b45bd3"
-}
-```
+Run saved examples for an exact Guard Rail draft revision.
+`authrail_test_guard_rail_draft`
 
-Pass that exact pair from the references to `authrail_get_policy_version`.
-It returns catalog title/status and exact version number, status, revision,
-publication, review-due and discard timestamps. A newer draft is not substituted.
-Policy document bodies and private ownership details are excluded.
+Create a Policy Rail draft for an exact published Policy version.
+`authrail_create_policy_rail_draft`
 
-```json
-{
-  "controlId":"e426c7b2-c1d1-4614-b9f9-ae9fd83f066f",
-  "controlVersionId":"1633c01f-a607-4bc5-91ae-bcb8056b9559",
-  "definitionId":"cc0171e0-356a-4ca4-9230-81b414575a99",
-  "limit":10
-}
-```
+Save a Policy Rail draft at its expected revision.
+`authrail_save_policy_rail_draft`
 
-Use `authrail_list_test_runs` with the Test list item’s **`id`** as `definitionId`.
-The item’s separate `definitionId` is its lineage, not the exact version record.
-Results contain recorded outcomes, periods, performance time and bounded
-evaluator metadata. They exclude inputs, explanations and provider data. An old
-passing run is not necessarily fresh or the latest applicable proof; use the
-Test summary and its freshness assessment for that question.
+Run saved examples for an exact Policy Rail draft revision.
+`authrail_test_policy_rail_draft`
 
-For `authrail_list_evidence_records`, use the Evidence Requirement list item’s
-**`id`** as `requirementId`, alongside the same exact Control owner. The list’s
-separate `requirementId` is lineage, not the required version record. Record
-metadata includes source type, period, collection time, review status, revision
-and replacement reference. `sourceRestricted` identifies a linked Runtime source
-outside the reader’s visibility. Source IDs, contents, attestations and URLs are
-excluded. A review status does not establish source availability or provider effects.
+### Information sources and Data Rails — `runtime.drafts`
 
-Pass a returned Record’s `id` as `recordId` to
-`authrail_list_evidence_record_decisions`, retaining all owner and requirement
-IDs. It returns retained decision IDs, decisions, reviewer staff references and
-timestamps, plus the Record’s saved status/revision. Private review reasons are
-excluded. Reading a retained decision never submits or replays it.
+Read supported information-source options.
+`authrail_get_data_source_options`
 
-All history lists accept `limit` 1–10 and `cursor`; verification histories also
-accept an exact optional `implementationVersionId`. Cursors bind the tenant,
-owner, tool and definition/requirement/record as applicable. They cannot be
-transferred between histories or used to switch to another version.
+List information-source definitions.
+`authrail_list_data_sources`
 
-## Provider Connection arguments and results
+Read an information source and its versions.
+`authrail_get_data_source`
 
-These tools require `connections.read` consent and the user’s `connection.read`
-workspace permission. This is separate from assistant OAuth connection identity.
+Read an exact information-source version.
+`authrail_get_data_source_version`
 
-```json
-{"limit":10}
-```
+Create an information-source draft.
+`authrail_create_data_source_draft`
 
-`authrail_list_connections` accepts an optional `limit` from 1–10 and the previous
-page’s `cursor`. Each result includes `id`, `displayName`, provider `code`, `name`
-and `capabilityName`, `status`, `health`, and creation/update timestamps. Names
-are bounded; `projectionTruncated` identifies shortened text. The cursor is
-bound to the selected workspace.
+Save an information-source draft at its expected revision.
+`authrail_save_data_source_draft`
 
-```json
-{"connectionId":"f221769a-4df6-45c9-9cd0-2668fbd86e20"}
-```
+Create a Data Rail draft for reviewed action and source versions.
+`authrail_create_data_rail_draft`
 
-`authrail_get_connection_status` uses an ID returned by that list. Health includes
-a state and nullable `lastSuccessfulSyncAt`; it follows the owning Connection
-health rules. These are saved collection signals, not a live provider check or
-a passing compliance assessment. Account boundaries, credentials, raw provider
-responses and failure messages are excluded. Neither read starts a sync.
+Save a Data Rail draft at its expected revision.
+`authrail_save_data_rail_draft`
 
-## Authentication
+Run saved examples for an exact Data Rail draft revision.
+`authrail_test_data_rail_draft`
 
-`GET /.well-known/oauth-protected-resource/mcp` identifies the protected resource,
-AuthRail authorization server and supported scopes. Missing or invalid credentials
-receive an OAuth challenge with the metadata address. A token without the required
-scope cannot discover or call the protected tools.
+### Deployments — `runtime.deployments`
 
-The service asks AuthRail to validate the token on each request. AuthRail checks
-the source sign-in session, account status, client status, selected organisation,
-live membership, consent, resource and expiry. The organisation comes from that
-grant, never from tool arguments or caller-supplied tenant headers.
+List visible deployments for an AI system.
+`authrail_list_deployments`
 
-## Backend bindings
+Create an Observe installation without credentials or active Rails.
+`authrail_create_deployment`
 
-| Request | Authentication | Purpose |
-| --- | --- | --- |
-| `POST /auth/mcp/introspect` with `{token}` | Private service credential | Validate the incoming resource token and return its bounded identity. |
-| `POST /auth/mcp/delegations/exchange` with `{token, tool}` | Private service credential | Issue a short-lived API delegation for the exact tool and grant. |
-| `GET /organisation/mcp/workspace` | Exact tool delegation and organisation header | Read workspace identity. |
-| `GET /organisation/mcp/frameworks` | `authrail_list_organisation_frameworks` delegation | Read a bounded selected Framework collection. |
-| `GET /organisation/mcp/frameworks/:organisationFrameworkId` | `authrail_get_organisation_framework` delegation | Read the selected exact version. |
-| `GET /organisation/mcp/frameworks/:organisationFrameworkId/readiness` | `authrail_get_framework_readiness` delegation | Read a bounded, visibility-checked saved assessment. |
-| `GET /organisation/mcp/control-mappings` | `authrail_list_control_mappings` delegation | Follow one exact Obligation’s visible mappings. |
-| `GET /organisation/mcp/controls/:controlId/versions/:controlVersionId` | `authrail_get_control` delegation | Inspect exact version metadata. |
-| `GET /organisation/mcp/controls/:controlId/versions/:controlVersionId/tests` | `authrail_list_tests` delegation | Read bounded Test summaries. |
-| `GET /organisation/mcp/controls/:controlId/versions/:controlVersionId/evidence-requirements` | `authrail_list_evidence_requirements` delegation | Read bounded proof requirements. |
-| `GET /organisation/mcp/controls/:controlId/versions/:controlVersionId/policy-bases` | `authrail_list_control_policy_bases` delegation | Read visible exact Policy references. |
-| `GET /organisation/mcp/policies/:policyId/versions/:policyVersionId` | `authrail_get_policy_version` delegation | Read exact Policy version metadata. |
-| `GET /organisation/mcp/controls/:controlId/versions/:controlVersionId/tests/:definitionId/runs` | `authrail_list_test_runs` delegation | Read bounded recorded run history. |
-| `GET /organisation/mcp/controls/:controlId/versions/:controlVersionId/evidence-requirements/:requirementId/records` | `authrail_list_evidence_records` delegation | Read safe Evidence Record history. |
-| `GET /organisation/mcp/controls/:controlId/versions/:controlVersionId/evidence-requirements/:requirementId/records/:recordId/decisions` | `authrail_list_evidence_record_decisions` delegation | Read retained review metadata. |
-| `GET /organisation/mcp/connections` | `authrail_list_connections` delegation | Read a page of Connection status metadata. |
-| `GET /organisation/mcp/connections/:connectionId` | `authrail_get_connection_status` delegation | Read one Connection’s saved health. |
+Read a deployment and its connection signals.
+`authrail_get_deployment`
 
-Incoming MCP tokens are not forwarded to tenant APIs. The service credential
-alone cannot obtain a workspace projection. AuthRail's backend owns OAuth
-issuance, consent, revocation and durable audit records.
+Read deployment setup metadata and public fingerprints.
+`authrail_get_deployment_setup`
 
-## Transport boundaries
+Read selected Rails, mode and sequence.
+`authrail_get_deployment_rail_selection`
 
-The listener validates Host and browser Origin. Native clients can omit Origin.
-Backend requests use fixed paths, bounded response sizes, deadlines and no
-redirect following. Backend errors are returned without raw response bodies.
-A failed or expired authorization must be resolved by reconnecting; changing
-arguments cannot expand the connection's access.
+Prepare an exact activation for human confirmation.
+`authrail_request_deployment_activation`
 
-`GET /health/live` checks process liveness. It does not establish user authority
-or a working connection to AuthRail.
+Prepare an exact Enforce renewal for human confirmation.
+`authrail_request_deployment_renewal`
 
-## Rail preparation tools
+Prepare Observe Rail removal for human confirmation.
+`authrail_request_deployment_revocation`
 
-These tools require explicit `runtime.drafts` consent in addition to
-`workspace.read`, plus the user's owning domain permissions.
+Prepare restoration of a retained Observe bundle for human confirmation.
+`authrail_request_deployment_rollback`
 
-| Tool | Input and result |
-| --- | --- |
-| `authrail_list_connected_actions` | Optional `limit` 1–50 and `afterId`; returns `operations`. |
-| `authrail_get_connected_action` | `operationId`; returns the action and its exact versions. |
-| `authrail_get_rail_draft` | `railId`, `versionId`; returns exact version content, revision and review URL. |
-| `authrail_propose_contextual_rail` | `kind`, reviewed `operationVersionId`, business `instructions` and a published `policyVersionId` for Policy; returns unsaved assessment, rules and unresolved questions. |
-| `authrail_create_guard_rail_draft` | `name`, reviewed `operationVersionId`, UUID `idempotencyKey`; returns draft identity. |
-| `authrail_create_policy_rail_draft` | Same creation fields plus published `policyVersionId`. |
-| `authrail_save_guard_rail_draft` / `authrail_save_policy_rail_draft` | `railId`, `versionId`, expected `revision`, `name`, complete `content`; returns the saved draft and review URL. |
-| `authrail_test_guard_rail_draft` / `authrail_test_policy_rail_draft` | Exact draft IDs and `revision`; returns example results. |
+### Approvals — `runtime.approvals`
 
-Creation retries reuse the same UUID only for identical content. After a revision
-conflict, read and reconcile the draft before saving again. Contextual assessment
-and examples are part of exact version content; saving invalidates an earlier
-test result. These tools cannot publish. Testing examples does not establish model
-accuracy, tool coverage or a provider effect.
+List pending requests assigned to the signed-in reviewer.
+`authrail_list_my_runtime_approvals`
 
-## Deployment and assigned approval tools
+Prepare an approve, reject or cancel decision for human confirmation.
+`authrail_request_runtime_approval_decision`
 
-`runtime.deployments` is separate consent for `authrail_list_deployments`,
-`authrail_create_deployment`, `authrail_get_deployment`,
-`authrail_get_deployment_setup` and `authrail_get_deployment_rail_selection`.
-Lists use exact Inventory item IDs, an optional UUID cursor and limit at most 100.
-Creation needs a name and UUID idempotency key and prepares only an Observe
-installation. It does not issue a credential, confirm identity or select Rails.
-Read/setup responses contain metadata, fingerprints and connection status, never
-private keys, plaintext credentials or private signed bundles. Domain visibility
-and AI Inventory read/manage and Rail publish permissions remain authoritative.
+### Action history — `runtime.read`
 
-`authrail_request_deployment_activation` and
-`authrail_request_deployment_renewal` take exact deployment/request IDs, expected
-sequence and Rail version IDs; activation also selects Observe or Enforce.
-`authrail_request_deployment_rollback` adds an exact retained source bundle and
-reason; `authrail_request_deployment_revocation` takes a reason. Rollback and
-revocation are Observe-only. These tools return ten-minute human review links
-and apply no change. The originating account signs in to review the exact proposed
-versions, mode and impact. Enforce activation and renewal require that human's
-explicit protected-tool and credential-isolation confirmation. Agents cannot
-supply this assertion. Changed state, expired proposals or lost permissions fail
-closed and require a fresh review. The domain transaction retains its original
-CAS and idempotency checks.
+Read bounded Action, decision and execution-receipt metadata.
+`authrail_get_runtime_action`
 
-Separate `runtime.approvals` consent exposes
-`authrail_list_my_runtime_approvals` (up to 30 pending requests, optional UUID
-cursor) and `authrail_request_runtime_approval_decision`. The list returns only
-assigned-request metadata and its immutable review hash, without the application's
-review context or requester identity. Preparing a decision requires the exact
-request ID, hash and approve/reject/cancel choice. It returns a human review link;
-it never casts a vote. Only the exact authenticated named reviewer can read the
-context and confirm the decision in AuthRail. No AI Inventory or publication
-permission is added to this reviewer path. Approval does not resume a business
-callback; the protected application retains that responsibility.
+### Existing compliance records — `governance.read`
 
-## Customer-side protected MCP contract
+List selected Framework versions.
+`authrail_list_organisation_frameworks`
 
-Hosted tools with `runtime.drafts` consent provide `authrail_get_protected_mcp_setup`,
-`authrail_create_connected_action_draft` and `authrail_save_connected_action_draft`.
-Preparation preserves UUID creation retries and exact expected revisions. The
-returned review link binds the organisation, Operation version and revision;
-an authenticated person confirms it in the tenant workspace. These tools cannot
-confirm an Operation, publish a Rail or activate a deployment.
+Read a selected Framework’s exact version and status.
+`authrail_get_organisation_framework`
 
-`authrail_get_runtime_action` requires separate `runtime.read` consent and exact
-`deploymentId` and `actionId`. It retains ordinary AI Inventory visibility and
-returns bounded Action/certificate/receipt metadata, truncation flags and a workspace
-link. Private signed assertions and approval review material are excluded.
+Read saved Framework readiness and applicable Obligations.
+`authrail_get_framework_readiness`
 
-The separate `authrail-protected-mcp` command speaks stdio to the local agent and
-fixed authenticated Streamable HTTP to a reviewed downstream server. Its private
-`--config` references the existing sidecar setup directory, loopback address,
-authenticated principal/session, private state directory, downstream URL and token
-file, exact tool bindings and optional trusted Data readers. Configuration is
-operator-owned; tool arguments cannot select any of those values.
+List visible Control mappings for an Obligation decision.
+`authrail_list_control_mappings`
 
-`--inspect` performs bounded tool discovery without business calls. Use `--tool`
-to inspect one exact name and `--idempotency-field` to exclude the string argument
-owned by the connector for a write. Omit both to discover all candidates. It returns
-downstream schemas/digests and the normalised result shape to review as an
-AuthRail Operation. Neither an inspected description nor a schema creates or
-confirms an Operation. Only an exact confirmed version may be bound.
+Read exact Control version metadata.
+`authrail_get_control`
 
-`--bind --output <new-private-file>` matches chosen tools against exact contracts
-from the sidecar's verified selected Enforce bundle. Inputs, normalised result,
-resource field, effect category and idempotency must agree; ambiguous matches
-require an explicitly selected version. The operator must review the real
-function's business meaning. Binding creates private configuration without
-overwriting an installed file or executing a business tool.
+List Test definitions and their latest reported assessments.
+`authrail_list_tests`
 
-| Tool | Input | Result |
-| --- | --- | --- |
-| Each explicitly bound business name | `requestKey`, `arguments` matching its reviewed input, excluding the injected idempotency field | `status`, authenticated `deploymentId`, optional `actionId`, `approvalRequestId`, and checked `result: {text, data}` only after completion |
-| `authrail_continue_request` | Bound `tool`, original `requestKey` | Saved state, or checked result after exact approval and execution |
-| `authrail_get_saved_request` | Bound `tool`, original `requestKey` | Local state and linked AuthRail IDs; no private continuation, credential or cached business output |
+List Evidence Requirements for an exact Control owner.
+`authrail_list_evidence_requirements`
 
-Results distinguish `blocked`, `awaiting_approval`, `claim_unknown`, `completed`,
-`result_withheld`, `outcome_unknown` and terminal review/reconciliation states.
-`checking` or `started` after a crash requires operator investigation. Repeating
-an existing key never starts the tool again. Changing arguments under that key
-fails. Use management MCP's authorised record tools to inspect AuthRail history;
-a local journal entry is not proof that a report reached the server.
+List exact Policy versions referenced by a Control version.
+`authrail_list_control_policy_bases`
 
-Approval status uses authenticated local `POST /approval-permits/status`.
-Its fresh Ed25519 proof has type `authrail.approval.status.v1` and binds the exact
-organisation, deployment, Action, approval, original input digest and executor
-fingerprint. It cannot be replayed as a permit claim. The sidecar forwards it
-with its deployment credential and returns bounded state/expiry metadata only.
-The SDK still owns permit claims, recovery and execution receipts.
+Read exact Policy version metadata.
+`authrail_get_policy_version`
 
-Only trusted embedding code can call `Connector.Reconcile` with a provider lookup
-using the retained recovery reference. No MCP tool accepts an agent's assertion
-that a payment succeeded, failed or should be retried. Unknown outcomes remain
-blocked until the operator establishes and records their actual outcome.
+List recorded runs for an exact Test version.
+`authrail_list_test_runs`
+
+List Evidence Record metadata for an exact requirement.
+`authrail_list_evidence_records`
+
+List retained review decisions for an exact Evidence Record.
+`authrail_list_evidence_record_decisions`
+
+## Local protected connector tools
+
+The separate `authrail-protected-mcp` command uses stdio. Each configured business
+tool accepts its reviewed arguments and a stable `requestKey`. The connector
+supplies the downstream idempotency field for writes.
+
+Request a reviewed business operation.
+`<configured business tool name>`
+
+Continue an unchanged saved request after human review.
+`authrail_continue_request`
+
+Read saved request status without executing or releasing cached output.
+`authrail_get_saved_request`
+
+Inputs and results follow the registered schemas in
+[protectedmcp/connector.go](protectedmcp/connector.go). The checked business result
+is `{text: string, data: object}`. Unreviewed content is withheld.
+
+## AuthRail API bindings
+
+Validate a resource token using the private service credential.
+`POST /auth/mcp/introspect`
+
+Exchange a resource token for an exact named-tool API delegation.
+`POST /auth/mcp/delegations/exchange`
+
+Delegated business endpoints belong to the AuthRail API. Their mounted paths and
+contracts are defined in [the MCP controllers](../authrail-server/src/auth/mcp).

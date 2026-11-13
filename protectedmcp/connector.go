@@ -46,8 +46,10 @@ type Config struct {
 	SessionID      string
 	StateDirectory string
 	JournalKey     []byte
-	Bindings       []Binding
-	Downstream     ToolClient
+	// SharedState opts into API-owned request recovery; nil keeps the local journal.
+	SharedState *SharedStateConfig
+	Bindings    []Binding
+	Downstream  ToolClient
 	// ResolveResource is optional trusted application lookup, not an agent-written callback.
 	ResolveResource func(context.Context, Binding, map[string]any) (string, error)
 }
@@ -63,8 +65,12 @@ type tool struct {
 type Connector struct {
 	config  Config
 	runtime *authrail.Client
-	state   *store
+	state   requestStore
 	tools   map[string]tool
+}
+
+type executionCheckpointer interface {
+	WithExecutionCheckpoint(func(context.Context, authrail.Recovery) error) *authrail.Client
 }
 type invocation struct {
 	RequestKey string         `json:"requestKey"`
@@ -116,7 +122,15 @@ func New(ctx context.Context, config Config) (*Connector, error) {
 	if err != nil {
 		return nil, err
 	}
-	state, err := openStore(config.StateDirectory, config.JournalKey)
+	var state requestStore
+	if config.SharedState != nil {
+		if _, ok := any(client).(executionCheckpointer); !ok {
+			return nil, errors.New("shared recovery requires an AuthRail Go SDK with execution checkpoint support")
+		}
+		state, err = openSharedStore(config.Runtime, *config.SharedState)
+	} else {
+		state, err = openStore(config.StateDirectory, config.JournalKey)
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -370,6 +384,10 @@ func (c *Connector) invoke(ctx context.Context, name string, input invocation) (
 	}
 	var args map[string]any
 	_ = json.Unmarshal(encoded, &args)
+	encoded, err = json.Marshal(args)
+	if err != nil {
+		return reply{}, errors.New("arguments cannot be retained")
+	}
 	if bound.validator.Validate(args) != nil {
 		return reply{}, errors.New("arguments do not match the reviewed tool schema")
 	}
@@ -397,7 +415,9 @@ func (c *Connector) invoke(ctx context.Context, name string, input invocation) (
 		return reply{}, err
 	}
 	reference, _ := args[bound.binding.ResourceField].(string)
-	saved = &record{Binding: bound.pin, Intent: intent, State: "checking", ResourceID: resource, ResourceReference: reference}
+	saved = &record{Binding: bound.pin, Intent: intent, State: "checking", ResourceID: resource, ResourceReference: reference,
+		Arguments: string(encoded), OperationVersionID: bound.binding.OperationVersionID,
+		PrincipalID: c.config.PrincipalID, SessionID: c.config.SessionID}
 	if err = c.state.save(key, saved); err != nil {
 		return reply{}, err
 	}
@@ -406,7 +426,7 @@ func (c *Connector) invoke(ctx context.Context, name string, input invocation) (
 		operation.ResourceSource = "application_lookup"
 	}
 	operation.ReviewSummary = reviewSummary(bound.binding, args)
-	result, decision, _, err := authrail.Enforce[map[string]any, ToolResult](ctx, c.runtime, operation, args, c.executor(bound, key, saved))
+	result, decision, _, err := authrail.Enforce[map[string]any, ToolResult](ctx, c.executionClient(key, saved), operation, args, c.executor(bound, key, saved))
 	return c.finish(key, saved, result, decision, err)
 }
 func (c *Connector) resolveResource(ctx context.Context, binding Binding, args map[string]any) (string, error) {
@@ -450,16 +470,26 @@ func reviewSummary(binding Binding, args map[string]any) *authrail.ReviewSummary
 	}
 	return &authrail.ReviewSummary{Title: "Review " + binding.Name, Fields: fields}
 }
+
+func (c *Connector) executionClient(key string, saved *record) *authrail.Client {
+	checkpoint, ok := any(c.runtime).(executionCheckpointer)
+	if !ok {
+		// Older released SDKs retain the established local journal path only.
+		return c.runtime
+	}
+	return checkpoint.WithExecutionCheckpoint(func(ctx context.Context, recovery authrail.Recovery) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		saved.State = "checking"
+		saved.ActionID = recovery.ActionID
+		saved.Recovery = &recovery
+		return c.state.save(key, saved)
+	})
+}
+
 func (c *Connector) executor(bound tool, key string, saved *record) func(context.Context, map[string]any, authrail.ExecutionContext) (ToolResult, error) {
 	return func(ctx context.Context, args map[string]any, execution authrail.ExecutionContext) (ToolResult, error) {
-		// This durable marker precedes every downstream effect, including approval recovery.
-		saved.State = "started"
-		saved.ActionID = execution.ActionID
-		recovery := authrail.Recovery(execution)
-		saved.Recovery = &recovery
-		if err := c.state.save(key, saved); err != nil {
-			return ToolResult{}, err
-		}
 		// Guards cannot redirect an authorised request to a different resource, and ownership is checked again after review.
 		reference, _ := args[bound.binding.ResourceField].(string)
 		resource, err := c.resolveResource(ctx, bound.binding, args)
@@ -481,6 +511,22 @@ func (c *Connector) executor(bound tool, key string, saved *record) func(context
 
 		if bound.binding.IdempotencyField != "" {
 			args[bound.binding.IdempotencyField] = execution.ProviderIdempotencyKey
+		}
+		// Persist one fenced dispatch marker only after the final resource/schema checks.
+		saved.State = "started"
+		saved.ActionID = execution.ActionID
+		recovery := authrail.Recovery(execution)
+		saved.Recovery = &recovery
+		if err := c.state.save(key, saved); err != nil {
+			return ToolResult{}, err
+		}
+		if saved.DispatchDeadline != nil {
+			if !saved.DispatchDeadline.After(time.Now()) {
+				return ToolResult{}, errors.New("protected dispatch deadline expired")
+			}
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithDeadline(ctx, *saved.DispatchDeadline)
+			defer cancel()
 		}
 		result, err := c.config.Downstream.CallTool(ctx, &mcp.CallToolParams{Name: bound.binding.DownstreamName, Arguments: args})
 		if err != nil || result == nil || result.IsError || result.NeedsInput() || result.RequestState != "" {

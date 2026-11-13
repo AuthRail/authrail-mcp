@@ -122,7 +122,7 @@ Non-text content, interactive input requests and unreviewed shapes are withheld.
 An execution report records what the connector reported, not independent proof of
 the provider's effect.
 
-## Local recovery
+## Request recovery
 
 An encrypted journal retains request arguments, reviewed bindings and approval
 continuations. Exclusive process ownership, per-request locks and atomic synced
@@ -137,9 +137,26 @@ identity. An agent cannot submit its own reconciliation claim.
 
 Keep the journal, encryption key and sidecar state through upgrades. A crash at an
 uncertain transition needs investigation; deleting state is not recovery. These
-local files are not a shared hosted store. The hosted design uses PostgreSQL for
-business execution and continuation ownership while gateway protocol sessions
-have their own routing and recovery contract.
+local files are not shared between replicas.
+
+The connector library now offers an opt-in API-backed store. The owning application
+supplies the API origin, deployment credential and executor key privately. Signed
+commands claim a tenant-scoped key, compare revisions and fence expired owners.
+Runtime encrypts the exact arguments and continuation in PostgreSQL. The Go SDK
+checkpoints Action/attempt recovery before requesting a start; a single-use saved
+dispatch marker must match the retained start before calling the tool. Its fixed
+one-minute deadline also bounds the downstream call. Restart or lease takeover
+cannot repeat that marker.
+
+A worker marks overdue started work uncertain, including a saved checking
+checkpoint whose start acknowledgement was lost. Trusted application code uses
+`Connector.Reconcile` to check the original provider identity and retain its outcome;
+the worker does not call providers or repeat writes. Pre-evaluation work without a
+start remains available for inspection without automatic reevaluation. The shared
+store requires checkpoint-capable Go SDK source; the currently pinned released SDK
+continues to support the default local journal. No CLI shared-store flag or hosted
+gateway dispatch is claimed. Gateway protocol sessions retain a separate routing
+and recovery contract.
 
 Provider credentials remain outside the agent's execution boundary. An equivalent
 direct tool route can bypass the connector. The system must remove or block that

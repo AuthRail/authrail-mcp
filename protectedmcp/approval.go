@@ -118,6 +118,9 @@ func (c *Connector) resume(ctx context.Context, name, requestKeyValue string) (r
 	if saved.State != "awaiting_approval" && saved.State != "claim_unknown" {
 		return c.publicRecord(saved), nil
 	}
+	if err := requireRequestOwnership(c.state, key); err != nil {
+		return reply{}, err
+	}
 	continuation := saved.Continuation
 	if continuation == nil || continuation.Call.OperationVersionID != bound.binding.OperationVersionID || continuation.Call.PrincipalID != c.config.PrincipalID || continuation.Call.SessionID != c.config.SessionID {
 		return reply{}, errors.New("saved approval binding is invalid")
@@ -148,9 +151,9 @@ func (c *Connector) resume(ctx context.Context, name, requestKeyValue string) (r
 	var result ToolResult
 	var decision *authrail.Decision
 	if state == "consumed" {
-		result, decision, err = authrail.RecoverApprovalFrom[map[string]any, ToolResult](ctx, c.runtime, *continuation, c.executor(bound, key, saved))
+		result, decision, err = authrail.RecoverApprovalFrom[map[string]any, ToolResult](ctx, c.executionClient(key, saved), *continuation, c.executor(bound, key, saved))
 	} else {
-		result, decision, err = authrail.ResumeApprovalFrom[map[string]any, ToolResult](ctx, c.runtime, *continuation, c.executor(bound, key, saved))
+		result, decision, err = authrail.ResumeApprovalFrom[map[string]any, ToolResult](ctx, c.executionClient(key, saved), *continuation, c.executor(bound, key, saved))
 	}
 	if err != nil && saved.State == "claim_unknown" {
 		return c.publicRecord(saved), nil
@@ -174,6 +177,9 @@ func (c *Connector) Reconcile(ctx context.Context, name, keyValue string, lookup
 	}
 	if saved.State != "outcome_unknown" && saved.State != "started" {
 		return errors.New("this request does not need provider reconciliation")
+	}
+	if err := requireRequestOwnership(c.state, key); err != nil {
+		return err
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()

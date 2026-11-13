@@ -55,6 +55,7 @@ type sidecarFixture struct {
 	setup              map[string]any
 	mu                 sync.Mutex
 	lostClaim          bool
+	lostStart          bool
 	approval           bool
 	deny               bool
 	withhold           bool
@@ -101,6 +102,10 @@ func (s *sidecarFixture) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewDecoder(r.Body).Decode(&body)
 		state := "succeeded"
 		if body["event"] == "started" {
+			if s.lostStart {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				return
+			}
 			state = "executing"
 		}
 		write(201, map[string]any{"receiptId": permitID, "state": state, "replayed": false})
@@ -197,6 +202,41 @@ func TestProtectedToolDecisionAndReplay(t *testing.T) {
 		})
 	}
 }
+func TestLostStartRetainsRecoveryWithoutDispatch(t *testing.T) {
+	if _, supported := any(&authrail.Client{}).(executionCheckpointer); !supported {
+		t.Skip("requires the source SDK with durable execution checkpoint support")
+	}
+	config, downstream, sidecar := fixture(t)
+	sidecar.lostStart = true
+	connector, err := New(context.Background(), config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := connector.invoke(context.Background(), "pay", request())
+	if err != nil || result.Status != "outcome_unknown" || downstream.effect != 0 {
+		t.Fatalf("lost start was not retained without dispatch: %v status=%s effects=%d", err, result.Status, downstream.effect)
+	}
+	key := connector.key("pay", request().RequestKey)
+	saved, err := connector.state.load(key)
+	if err != nil || saved == nil || saved.Recovery == nil || saved.Recovery.ActionID != actionID ||
+		!uuid.MatchString(saved.Recovery.AttemptID) || !digest.MatchString(saved.Recovery.InputSHA256) || saved.Arguments == "" {
+		t.Fatalf("lost start identity is unavailable: %v", err)
+	}
+	if err = connector.Close(); err != nil {
+		t.Fatal(err)
+	}
+	sidecar.lostStart = false
+	restarted, err := New(context.Background(), config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer restarted.Close()
+	replayed, err := restarted.invoke(context.Background(), "pay", request())
+	if err != nil || replayed.Status != "outcome_unknown" || replayed.ActionID != actionID || downstream.effect != 0 {
+		t.Fatalf("saved unknown start was executed after restart: %v status=%s effects=%d", err, replayed.Status, downstream.effect)
+	}
+}
+
 func TestApprovalSurvivesRestartAndWaitsWithoutClaim(t *testing.T) {
 	config, downstream, sidecar := fixture(t)
 	sidecar.approval = true

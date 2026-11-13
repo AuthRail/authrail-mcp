@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	authrail "github.com/AuthRail/authrail-sdk-go"
 	"golang.org/x/sys/unix"
@@ -19,16 +20,36 @@ import (
 
 // Records are private recovery state, not proof that a provider effect occurred.
 type record struct {
-	ResourceID        string                         `json:"resourceId,omitempty"`
-	ResourceReference string                         `json:"resourceReference,omitempty"`
-	Binding           string                         `json:"binding"`
-	Intent            string                         `json:"intent"`
-	State             string                         `json:"state"`
-	ActionID          string                         `json:"actionId,omitempty"`
-	ApprovalID        string                         `json:"approvalId,omitempty"`
-	Continuation      *authrail.ApprovalContinuation `json:"continuation,omitempty"`
-	Recovery          *authrail.Recovery             `json:"recovery,omitempty"`
+	Arguments          string                         `json:"arguments,omitempty"`
+	OperationVersionID string                         `json:"operationVersionId,omitempty"`
+	PrincipalID        string                         `json:"principalId,omitempty"`
+	SessionID          string                         `json:"sessionId,omitempty"`
+	ResourceID         string                         `json:"resourceId,omitempty"`
+	ResourceReference  string                         `json:"resourceReference,omitempty"`
+	Binding            string                         `json:"binding"`
+	Intent             string                         `json:"intent"`
+	State              string                         `json:"state"`
+	ActionID           string                         `json:"actionId,omitempty"`
+	ApprovalID         string                         `json:"approvalId,omitempty"`
+	Continuation       *authrail.ApprovalContinuation `json:"continuation,omitempty"`
+	Recovery           *authrail.Recovery             `json:"recovery,omitempty"`
+	DispatchDeadline   *time.Time                     `json:"-"`
 }
+
+type requestStore interface {
+	acquire(string) func()
+	load(string) (*record, error)
+	save(string, *record) error
+	close() error
+}
+
+func requireRequestOwnership(state requestStore, key string) error {
+	if shared, ok := state.(*sharedStore); ok {
+		return shared.ownershipError(key)
+	}
+	return nil
+}
+
 type store struct {
 	root    string
 	aead    cipher.AEAD

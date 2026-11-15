@@ -27,10 +27,17 @@ which requests were stopped, which were approved and what happened afterward.
 
 ## How the pieces work together
 
-The MCP service exposes named tools for account setup and status, Rail drafts,
-application configuration, approval review, action history and compliance records.
-Each tool calls the AuthRail API, which checks your identity, permissions and
-access to the selected records. [API.md](API.md) lists the tools and contracts.
+AuthRail MCP is the assistant's governed entry into AuthRail and connected business
+systems. Its scope covers business actions, account connections, Policy, Data and
+Guard Rails, approvals, application and organisation management, activity and
+compliance workflows. You use one AuthRail connection, with access determined by
+your identity, organisation permissions and the accounts and tools authorised for
+the task.
+
+Requests use the same domain rules as the AuthRail workspace. Rails govern the
+business request and its result; credentials stay private, and reserved human
+decisions require your confirmation. [API.md](API.md) lists the individual tools,
+inputs and consent contracts.
 
 The API owns accounts, approvals and durable execution records. The sidecar
 evaluates published Rails. The private gateway adapter and agentgateway deliver
@@ -46,7 +53,7 @@ implementation boundaries.
 ## Connect an assistant
 
 Use the MCP address supplied by your AuthRail installation. The standard
-configuration uses `https://mcp.authrail.io/mcp` as a remote Streamable HTTP
+configuration uses `https://mcp.authrail.io` as a remote Streamable HTTP
 connection in a compatible assistant.
 
 1. Start the assistant's connection flow and sign in to AuthRail.
@@ -210,21 +217,23 @@ origin, public MCP address and private service credential:
 ```sh
 go build -o bin/authrail-mcp ./cmd/authrail-mcp
 export AUTHRAIL_MCP_API_URL=https://api.example.com
-export AUTHRAIL_MCP_RESOURCE_URL=https://mcp.example.com/mcp
 export AUTHRAIL_MCP_AUTHORIZATION_SERVER_URL=https://api.example.com/auth
 export AUTHRAIL_MCP_SERVICE_TOKEN_FILE=/run/secrets/authrail-mcp-service-token
 ./bin/authrail-mcp
 ```
 
-Replace the example addresses with the deployed addresses. The API's
-`MCP_RESOURCE_URL` must match `AUTHRAIL_MCP_RESOURCE_URL`. The mounted credential
+Replace the example API address with your installation's address and set
+`AUTHRAIL_MCP_RESOURCE_URL` to its configured OAuth resource identifier before
+starting the process. The API's `MCP_RESOURCE_URL` must match that identifier.
+The [service configuration reference](ARCHITECTURE.md#listener-and-resource-configuration)
+defines the listener and resource settings together. The mounted credential
 must match the API's private MCP service credential and be readable only by its
 owner. It authenticates the service; users still sign in and grant consent.
 
 | Variable | Setting |
 | --- | --- |
 | `AUTHRAIL_MCP_API_URL` | Required HTTPS API origin, without a path. |
-| `AUTHRAIL_MCP_RESOURCE_URL` | Required public HTTPS MCP URL ending in `/mcp`. |
+| `AUTHRAIL_MCP_RESOURCE_URL` | Required HTTPS OAuth resource identifier matching the API and listener. |
 | `AUTHRAIL_MCP_AUTHORIZATION_SERVER_URL` | OAuth issuer; defaults to the API origin followed by `/auth`. |
 | `AUTHRAIL_MCP_LISTEN` | Defaults to `127.0.0.1:3016`; use `0.0.0.0:3016` in a container. |
 | `AUTHRAIL_MCP_SERVICE_TOKEN_FILE` | Private mounted service credential. |
@@ -238,9 +247,8 @@ not load `.env` files. Flags include `-listen`, `-api`, `-resource`,
 `-trusted-api-origin`; `-local` also enables HTTP loopback development.
 The private HTTP exception must match the configured API origin exactly.
 
-Put a deployed listener behind HTTPS ingress. It serves `/mcp` and
-`/.well-known/oauth-protected-resource/mcp`; change its route, resource identity,
-OAuth audience and client configuration together if adopting a different address.
+Put a deployed listener behind HTTPS ingress at `https://mcp.authrail.io`.
+Configure its listener, OAuth resource, audience and discovery metadata together.
 See [API.md](API.md) for health, discovery, gateway and tool contracts, and
 [ARCHITECTURE.md](ARCHITECTURE.md) for ownership, transactions and recovery.
 

@@ -229,3 +229,15 @@ inside a bounded HTTP envelope, preserving exact JSON numbers. The API consumes
 provider start once and interprets the real provider reply. The adapter retains
 transport evidence and returns result_pending_check. Public assistant business
 dispatch and protected result release remain in their owning integration slices.
+
+## Listener and resource configuration
+
+The agreed public assistant address is https://mcp.authrail.io, without an /mcp
+suffix. README product guidance uses that address. The source listener still
+mounts POST /mcp and resource discovery at
+/.well-known/oauth-protected-resource/mcp; its resource validator requires the
+matching /mcp OAuth identifier. These wire contracts are described in API.md.
+An operator running this source must use a matching listener/resource/API
+configuration. The root listener, discovery metadata, resource validator, OAuth
+audience and assistant settings change together in slice 13. Documentation alone
+does not change the mounted service or establish public availability.

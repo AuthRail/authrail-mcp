@@ -30,9 +30,26 @@ func validTicket(value string) bool {
 	return len(value) >= 32 && len(value) <= 16384 && !strings.ContainsAny(value, "\r\n\x00 \t")
 }
 func validRoute(route Route) bool {
+	if route.Protocol == "http" {
+		return validProviderRoute(route, "http://api:3003")
+	}
 	u, err := url.Parse(route.Endpoint)
 	return validTarget(route.Target) && (route.Protocol == "mcp" || route.Protocol == "a2a") && err == nil &&
 		u.Host != "" && u.User == nil && u.Fragment == "" && u.RawQuery == "" && u.Scheme == "https"
+}
+
+func validProviderRoute(route Route, apiOrigin string) bool {
+	u, err := url.Parse(apiOrigin)
+	return validTarget(route.Target) && route.Protocol == "http" && err == nil && u.Scheme == "http" &&
+		u.Host != "" && u.User == nil && u.RawQuery == "" && u.Fragment == "" && (u.Path == "" || u.Path == "/") &&
+		route.Endpoint == strings.TrimSuffix(apiOrigin, "/")+"/internal/gateway/provider"
+}
+
+func validRouteForAPI(route Route, apiOrigin string) bool {
+	if route.Protocol == "http" {
+		return validProviderRoute(route, apiOrigin)
+	}
+	return validRoute(route)
 }
 
 type Configuration struct {
@@ -109,7 +126,7 @@ func (c *Configuration) Sync(ctx context.Context) error {
 	routes := make(map[string]Route, len(snapshot.Routes))
 	pinned := make(map[string]string, len(snapshot.Routes))
 	for _, route := range snapshot.Routes {
-		if !validRoute(route) {
+		if !validRouteForAPI(route, c.api.origin) {
 			return errBoundary
 		}
 		if _, exists := routes[route.Target]; exists {
@@ -117,6 +134,12 @@ func (c *Configuration) Sync(ctx context.Context) error {
 		}
 		routes[route.Target] = route
 		endpoint, _ := url.Parse(route.Endpoint)
+		if route.Protocol == "http" {
+			// This is the configured private API itself, not a customer-selected
+			// upstream. No other private destination gains this exception.
+			pinned[route.Target] = endpoint.Hostname()
+			continue
+		}
 		addresses, err := net.DefaultResolver.LookupNetIP(ctx, "ip", endpoint.Hostname())
 		if err != nil || len(addresses) == 0 || len(addresses) > 32 {
 			return errBoundary
@@ -224,6 +247,9 @@ func configurationJSON(routes []Route, hookHost, key, transportToken string, pin
 		port := endpoint.Port()
 		if port == "" {
 			port = "443"
+			if route.Protocol == "http" {
+				port = "80"
+			}
 		}
 		portNumber, err := strconv.Atoi(port)
 		if err != nil || portNumber < 1 || portNumber > 65535 {
@@ -233,7 +259,11 @@ func configurationJSON(routes []Route, hookHost, key, transportToken string, pin
 		if path == "" {
 			path = "/"
 		}
-		transportPolicies["backendTLS"] = map[string]string{"hostname": endpoint.Hostname()}
+		if route.Protocol != "http" {
+			transportPolicies["backendTLS"] = map[string]string{"hostname": endpoint.Hostname()}
+		} else if endpoint.Scheme != "http" || endpoint.Path != "/internal/gateway/provider" || endpoint.RawQuery != "" || endpoint.User != nil || endpoint.Fragment != "" {
+			return nil, errBoundary
+		}
 		transportPolicies["requestHeaderModifier"] = map[string]interface{}{"remove": []string{dispatchHeader, ticketHeader, "Cookie"}, "set": map[string]string{"Host": endpoint.Host}}
 		backend := map[string]interface{}{}
 		if route.Protocol == "mcp" {
@@ -251,7 +281,9 @@ func configurationJSON(routes []Route, hookHost, key, transportToken string, pin
 				"name": route.Target, "mcp": map[string]interface{}{"host": address, "port": portNumber, "path": path}, "policies": transportPolicies,
 			}}}
 		} else {
-			policies["a2a"] = map[string]interface{}{}
+			if route.Protocol == "a2a" {
+				policies["a2a"] = map[string]interface{}{}
+			}
 			policies["urlRewrite"] = map[string]interface{}{"path": map[string]string{"full": path}}
 			backend["host"] = net.JoinHostPort(address, port)
 			backend["policies"] = transportPolicies

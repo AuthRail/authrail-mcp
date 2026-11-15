@@ -139,7 +139,7 @@ applied to A2A as if the protocols were interchangeable.
 The pinned private MCP hop negotiates `2025-11-25` with the gateway's stateful
 listener. The management listener retains its own supported protocol versions.
 Generated ExtMCP wire bindings come from the same published gateway tag; the
-gateway implementation is not forked. Custom review publishes private routes;
+gateway implementation is not forked. Custom and native provider review publish private routes;
 public root naming and assistant business execution remain separate contracts.
 
 The hosted path reuses the sidecar's Go evaluation engine. The API coordinates
@@ -150,7 +150,9 @@ Rule caches stay in sidecar memory; durable work belongs in PostgreSQL.
 
 The private gateway adapter translates protocol requests/results into those
 contracts and sends permitted work through agentgateway using the reviewed account
-credential. It is not another agent or policy engine. Result checks precede
+credential for external MCP/A2A targets. Native provider routes use the gateway
+standard HTTP backend and an attempt bearer to one fixed private API endpoint;
+account keys stay inside the API. It is not another agent or policy engine. Result checks precede
 information release; execution outcomes are retained separately from permission.
 
 Business response deadlines are one minute. An overdue attempt triggers provider
@@ -214,3 +216,16 @@ Provider credentials remain outside the agent's execution boundary. An equivalen
 direct tool route can bypass the connector. The system must remove or block that
 route before claiming enforcement; filesystem permissions alone do not contain
 an unrestricted agent running as the same operating-system user.
+
+## Native account setup
+
+Separate named management tools list the selected providers, saved accounts and
+review status. A management-consented assistant can open an authenticated human
+page to connect, review, replace access or disconnect. These tools receive no
+credentials and do not grant permission to execute business actions.
+
+For a saved native dispatch, the adapter forwards the original parameter string
+inside a bounded HTTP envelope, preserving exact JSON numbers. The API consumes
+provider start once and interprets the real provider reply. The adapter retains
+transport evidence and returns result_pending_check. Public assistant business
+dispatch and protected result release remain in their owning integration slices.

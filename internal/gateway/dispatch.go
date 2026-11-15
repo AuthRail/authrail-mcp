@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"strings"
 	"sync"
 	"time"
 
@@ -103,6 +104,8 @@ func (d *Dispatcher) dispatch(w http.ResponseWriter, r *http.Request) {
 	var result json.RawMessage
 	if resolution.Protocol == "mcp" {
 		result, err = d.callMCP(ctx, input.Ticket, resolution)
+	} else if resolution.Protocol == "http" {
+		result, err = d.callHTTP(ctx, input.Ticket, resolution)
 	} else {
 		result, err = d.callA2A(ctx, input.Ticket, resolution)
 	}
@@ -131,6 +134,61 @@ func (d *Dispatcher) dispatch(w http.ResponseWriter, r *http.Request) {
 }
 
 var errRPC = errors.New("upstream RPC did not complete")
+
+func (d *Dispatcher) callHTTP(ctx context.Context, ticket string, resolution Resolution) (json.RawMessage, error) {
+	if resolution.Method != http.MethodPost || !validProviderRoute(resolution.Route, d.api.origin) {
+		return nil, errBoundary
+	}
+	permission, err := d.api.request(ctx, RequestCheck{Ticket: ticket, Target: resolution.Target,
+		Protocol: "http", Method: http.MethodPost, Params: resolution.Params})
+	if err != nil || !validTicket(permission.AttemptToken) || !permission.DeadlineAt.After(time.Now()) ||
+		permission.Authorization == nil || *permission.Authorization != "Bearer "+permission.AttemptToken {
+		return nil, errBoundary
+	}
+	// The gateway receives only a one-use internal attempt credential. Provider
+	// secrets remain in the API and are used at its final provider-call boundary.
+	body, err := json.Marshal(struct {
+		Params string `json:"params"`
+	}{resolution.Params})
+	if err != nil {
+		return nil, errBoundary
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, d.origin+"/http/"+resolution.Target, bytes.NewReader(body))
+	if err != nil {
+		return nil, errBoundary
+	}
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "application/json")
+	request.Header.Set("Authorization", *permission.Authorization)
+	request.Header.Set(dispatchHeader, d.configuration.transportToken())
+	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(request.Header))
+	response, err := d.client.Do(request)
+	if err != nil {
+		return nil, errBoundary
+	}
+	defer response.Body.Close()
+	if response.StatusCode < 200 || response.StatusCode >= 300 {
+		return nil, errRPC
+	}
+	if !strings.HasPrefix(response.Header.Get("Content-Type"), "application/json") {
+		return nil, errRPC
+	}
+	encoded, err := io.ReadAll(io.LimitReader(response.Body, maxBody/2+1))
+	if err != nil {
+		return nil, errBoundary
+	}
+	if len(encoded) > maxBody/2 {
+		return nil, errOversized
+	}
+	if !json.Valid(encoded) {
+		return nil, errRPC
+	}
+	if err = d.api.response(ctx, ResponseCheck{AttemptToken: permission.AttemptToken,
+		Target: resolution.Target, Protocol: "http", Method: http.MethodPost, Result: string(encoded)}); err != nil {
+		return nil, err
+	}
+	return json.RawMessage(encoded), nil
+}
 
 func (d *Dispatcher) callA2A(ctx context.Context, ticket string, resolution Resolution) (json.RawMessage, error) {
 	// Streaming/task subscriptions need their own durable lifecycle, not a read-all fallback.

@@ -49,10 +49,12 @@ func toolServer(backend *Backend, identity Identity) *mcp.Server {
 	if slices.Contains(identity.Scopes, ConnectionsScope) {
 		addConnectionTools(server, backend)
 		addCustomConnectionTools(server, backend)
+		addBusinessConnectionTools(server, backend)
 	}
 	if slices.Contains(identity.Scopes, ConnectionsManageScope) {
 		addConnectionManagementTools(server, backend)
 		addCustomConnectionManagementTools(server, backend)
+		addBusinessConnectionManagementTools(server, backend)
 	}
 	if slices.Contains(identity.Scopes, RuntimeReadScope) {
 		addRuntimeRecordTools(server, backend)

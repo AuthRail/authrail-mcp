@@ -131,7 +131,7 @@ func (a *API) resolve(ctx context.Context, ticket string) (Resolution, error) {
 	err := a.call(ctx, "/internal/gateway/resolve", struct {
 		Ticket string `json:"ticket"`
 	}{ticket}, &resolution)
-	if err == nil && (!validRoute(resolution.Route) || !json.Valid([]byte(resolution.Params)) ||
+	if err == nil && (!validRouteForAPI(resolution.Route, a.origin) || !json.Valid([]byte(resolution.Params)) ||
 		len(resolution.Params) > maxBody/2 || resolution.Method == "" || len(resolution.Method) > 128 ||
 		!resolution.DeadlineAt.After(time.Now()) || resolution.DeadlineAt.After(time.Now().Add(time.Minute))) {
 		err = errBoundary

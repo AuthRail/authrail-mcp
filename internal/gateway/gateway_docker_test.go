@@ -79,10 +79,28 @@ func TestPinnedGatewayDispatch(t *testing.T) {
 	routes := []Route{{Target: "ar-11111111111111111111111111111111", Protocol: "mcp", Endpoint: "https://example.com:" + upstreamURL.Port() + "/mcp"},
 		{Target: "ar-22222222222222222222222222222222", Protocol: "a2a", Endpoint: "https://example.com:" + upstreamURL.Port() + "/a2a"}}
 	params := []string{`{"name":"create_issue","arguments":{"amount":9007199254740993}}`,
-		`{"message":{"messageId":"fixture","role":"user","parts":[{"kind":"text","text":"hello"}]}}`}
-	var calls [2]atomic.Int32
-	var responses [2]atomic.Int32
+		`{"message":{"messageId":"fixture","role":"user","parts":[{"kind":"text","text":"hello"}]}}`,
+		`{"name":"stripe.refund_charge","arguments":{"amount":9007199254740993}}`}
+	var calls [3]atomic.Int32
+	var responses [3]atomic.Int32
 	apiServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/internal/gateway/provider" {
+			encoded, _ := io.ReadAll(r.Body)
+			var envelope struct {
+				Params string `json:"params"`
+			}
+			decodeErr := json.Unmarshal(encoded, &envelope)
+			if r.Header.Get("Authorization") != "Bearer "+strings.Repeat("t", 40) || r.Header.Get(dispatchHeader) != "" ||
+				r.Header.Get(ticketHeader) != "" || r.Header.Get("Cookie") != "" || decodeErr != nil || envelope.Params != params[2] {
+				t.Error("native API did not receive the exact attempt credential/body isolation")
+				http.Error(w, "denied", http.StatusForbidden)
+				return
+			}
+			effects.Add(1)
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"state":"accepted","providerReference":"re_fixture"}`)
+			return
+		}
 		if r.Header.Get("Authorization") != "Bearer "+serviceToken {
 			http.Error(w, "denied", 403)
 			return
@@ -95,6 +113,8 @@ func TestPinnedGatewayDispatch(t *testing.T) {
 		index := 0
 		if input.Ticket == strings.Repeat("b", 40) || input.Target == routes[1].Target {
 			index = 1
+		} else if input.Ticket == strings.Repeat("c", 40) || len(routes) > 2 && input.Target == routes[2].Target {
+			index = 2
 		}
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
@@ -102,16 +122,21 @@ func TestPinnedGatewayDispatch(t *testing.T) {
 			method := "tools/call"
 			if index == 1 {
 				method = "message/send"
+			} else if index == 2 {
+				method = http.MethodPost
 			}
 			json.NewEncoder(w).Encode(Resolution{Route: routes[index], Method: method, Params: params[index], DeadlineAt: time.Now().Add(50 * time.Second)})
 		case "/internal/gateway/request":
-			if input.Method == "tools/call" || input.Method == "message/send" {
+			if input.Method == "tools/call" || input.Method == "message/send" || input.Method == http.MethodPost {
 				if calls[index].Add(1) != 1 {
 					http.Error(w, "already dispatched", 409)
 					return
 				}
 			}
 			authorization := "Bearer " + providerToken
+			if index == 2 {
+				authorization = "Bearer " + strings.Repeat("t", 40)
+			}
 			json.NewEncoder(w).Encode(RequestPermission{Allowed: true, AttemptToken: strings.Repeat("t", 40), Authorization: &authorization, DeadlineAt: time.Now().Add(50 * time.Second)})
 		case "/internal/gateway/response":
 			responses[index].Add(1)
@@ -123,6 +148,7 @@ func TestPinnedGatewayDispatch(t *testing.T) {
 		}
 	}))
 	defer apiServer.Close()
+	routes = append(routes, Route{Target: "ar-33333333333333333333333333333333", Protocol: "http", Endpoint: apiServer.URL + "/internal/gateway/provider"})
 	api, err := NewAPI(apiServer.URL, serviceToken, true)
 	if err != nil {
 		t.Fatal(err)
@@ -136,7 +162,7 @@ func TestPinnedGatewayDispatch(t *testing.T) {
 	go grpcServer.Serve(grpcListener)
 	defer grpcServer.Stop()
 	fixtureConfiguration := &Configuration{key: strings.Repeat("1", 64)}
-	encoded, err := configurationJSON(routes, "host.docker.internal:"+strings.Split(grpcListener.Addr().String(), "]:")[1], fixtureConfiguration.key, fixtureConfiguration.transportToken(), map[string]string{routes[0].Target: "host.docker.internal", routes[1].Target: "host.docker.internal"})
+	encoded, err := configurationJSON(routes, "host.docker.internal:"+strings.Split(grpcListener.Addr().String(), "]:")[1], fixtureConfiguration.key, fixtureConfiguration.transportToken(), map[string]string{routes[0].Target: "host.docker.internal", routes[1].Target: "host.docker.internal", routes[2].Target: "host.docker.internal"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +179,9 @@ func TestPinnedGatewayDispatch(t *testing.T) {
 		if mcpBackend, ok := backend["mcp"]; ok {
 			policies = mcpBackend.(map[string]interface{})["targets"].([]interface{})[0].(map[string]interface{})["policies"]
 		}
-		policies.(map[string]interface{})["backendTLS"].(map[string]interface{})["root"] = "/verification/root.pem"
+		if tls, ok := policies.(map[string]interface{})["backendTLS"]; ok {
+			tls.(map[string]interface{})["root"] = "/verification/root.pem"
+		}
 	}
 	encoded, _ = json.Marshal(config)
 	if err = os.WriteFile(filepath.Join(dir, "config.json"), encoded, 0644); err != nil {
@@ -203,7 +231,19 @@ func TestPinnedGatewayDispatch(t *testing.T) {
 	if bypassResponse.StatusCode != 403 || effects.Load() != 0 {
 		t.Fatal("private gateway allowed dispatcher bypass")
 	}
-	configuration := &Configuration{key: fixtureConfiguration.key, routes: map[string]Route{routes[0].Target: routes[0], routes[1].Target: routes[1]}, revision: "fixture", updated: time.Now()}
+	nativeBypass, _ := http.NewRequest(http.MethodPost, origin+"/http/"+routes[2].Target, strings.NewReader(params[2]))
+	nativeBypass.Header.Set("Content-Type", "application/json")
+	nativeBypass.Header.Set("Authorization", "Bearer "+strings.Repeat("t", 40))
+	nativeBypass.Header.Set(dispatchHeader, (&Configuration{key: serviceToken}).transportToken())
+	nativeBypassResponse, err := http.DefaultClient.Do(nativeBypass)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nativeBypassResponse.Body.Close()
+	if nativeBypassResponse.StatusCode != 403 || effects.Load() != 0 {
+		t.Fatal("native HTTP allowed dispatcher bypass")
+	}
+	configuration := &Configuration{key: fixtureConfiguration.key, routes: map[string]Route{routes[0].Target: routes[0], routes[1].Target: routes[1], routes[2].Target: routes[2]}, revision: "fixture", updated: time.Now()}
 	dispatcher, err := NewDispatcher(api, configuration, origin, true)
 	if err != nil {
 		t.Fatal(err)
@@ -212,6 +252,8 @@ func TestPinnedGatewayDispatch(t *testing.T) {
 		ticket := strings.Repeat("a", 40)
 		if index == 1 {
 			ticket = strings.Repeat("b", 40)
+		} else if index == 2 {
+			ticket = strings.Repeat("c", 40)
 		}
 		req := httptest.NewRequest(http.MethodPost, "http://private/dispatch", strings.NewReader(`{"ticket":"`+ticket+`"}`))
 		req.Header.Set("Authorization", "Bearer "+serviceToken)
@@ -225,8 +267,8 @@ func TestPinnedGatewayDispatch(t *testing.T) {
 			t.Fatalf("%s missing exact request/result hook", routes[index].Protocol)
 		}
 	}
-	if effects.Load() != 2 {
-		t.Fatalf("expected two isolated effects, got %d", effects.Load())
+	if effects.Load() != 3 {
+		t.Fatalf("expected three isolated effects, got %d", effects.Load())
 	}
 }
 

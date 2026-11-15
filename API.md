@@ -20,7 +20,7 @@ Read a public HTTPS MCP server's tools using separately supplied account access.
 This private operation performs discovery only and grants no tool authority.
 `POST /discover`
 
-Send one API-issued ticket through its reviewed MCP or A2A route. This private
+Send one API-issued ticket through its reviewed MCP, A2A or native provider HTTP route. This private
 endpoint returns `result_pending_check`; it does not release a result to an
 assistant or establish that the business action succeeded.
 `POST /dispatch`
@@ -69,7 +69,21 @@ List saved customer MCP connections without contacting their servers.
 Read saved tool names and review status for one customer MCP connection.
 `authrail_get_custom_connection`
 
+List the selected native business providers without connecting an account.
+`authrail_list_business_providers`
+
+List saved native business accounts.
+`authrail_list_business_accounts`
+
+Read an account's saved status and bounded tool-access summary.
+`authrail_get_business_account`
+
 ### Account setup — `connections.manage`
+
+Open secure account setup, tool review, access replacement or disconnection.
+Credentials and the final human action stay on the authenticated AuthRail page.
+`authrail_manage_business_account`
+
 
 Find available provider setup options and exact definition versions.
 `authrail_list_connection_providers`

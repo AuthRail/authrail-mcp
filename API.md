@@ -16,6 +16,10 @@ Check API availability from the MCP service.
 
 ## Private gateway adapter
 
+Read a public HTTPS MCP server's tools using separately supplied account access.
+This private operation performs discovery only and grants no tool authority.
+`POST /discover`
+
 Send one API-issued ticket through its reviewed MCP or A2A route. This private
 endpoint returns `result_pending_check`; it does not release a result to an
 assistant or establish that the business action succeeded.
@@ -59,6 +63,12 @@ List provider Connections and their saved health.
 Read one provider Connection’s saved status.
 `authrail_get_connection_status`
 
+List saved customer MCP connections without contacting their servers.
+`authrail_list_custom_connections`
+
+Read saved tool names and review status for one customer MCP connection.
+`authrail_get_custom_connection`
+
 ### Account setup — `connections.manage`
 
 Find available provider setup options and exact definition versions.
@@ -66,6 +76,9 @@ Find available provider setup options and exact definition versions.
 
 Open a secure page for a person to connect, reconnect or disconnect an account.
 `authrail_manage_connection`
+
+Open secure human setup, tool review, refresh or disconnection for a customer MCP server.
+`authrail_manage_custom_connection`
 
 The handoff does not change account access. Provider consent, credential entry and
 disconnect confirmation happen in the authenticated application.

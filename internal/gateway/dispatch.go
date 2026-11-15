@@ -209,6 +209,9 @@ func (d *Dispatcher) callMCP(ctx context.Context, ticket string, resolution Reso
 	if err != nil {
 		return nil, err
 	}
+	if err := d.checkReviewedTool(ctx, ticket, resolution, connectionAccess.Authorization); err != nil {
+		return nil, err
+	}
 	var params mcp.CallToolParams
 	decoder := json.NewDecoder(bytes.NewBufferString(resolution.Params))
 	decoder.UseNumber()

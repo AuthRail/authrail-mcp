@@ -32,11 +32,12 @@ type Routes struct {
 }
 type Resolution struct {
 	Route
-	Method     string    `json:"method"`
-	Params     string    `json:"params"`
-	DeadlineAt time.Time `json:"deadlineAt"`
-	ActionID   string    `json:"actionId"`
-	AttemptID  string    `json:"attemptId"`
+	Method       string         `json:"method"`
+	Params       string         `json:"params"`
+	DeadlineAt   time.Time      `json:"deadlineAt"`
+	ActionID     string         `json:"actionId"`
+	ReviewedTool *DiscoveryTool `json:"reviewedTool,omitempty"`
+	AttemptID    string         `json:"attemptId"`
 }
 type RequestCheck struct {
 	Ticket    string `json:"ticket"`
@@ -165,4 +166,18 @@ func (a *API) failure(parent context.Context, ticket, target, kind string) bool 
 	defer cancel()
 	var result retained
 	return a.call(ctx, "/internal/gateway/failure", Failure{ticket, target, kind}, &result) == nil && result.Retained
+}
+
+func (a *API) schemaChange(ctx context.Context, ticket, target string) error {
+	var result retained
+	if err := a.call(ctx, "/internal/gateway/schema-change", struct {
+		Ticket string `json:"ticket"`
+		Target string `json:"target"`
+	}{ticket, target}, &result); err != nil {
+		return err
+	}
+	if !result.Retained {
+		return errBoundary
+	}
+	return nil
 }

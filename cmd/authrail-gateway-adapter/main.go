@@ -60,7 +60,10 @@ func main() {
 	}
 	grpcServer := grpc.NewServer(grpc.MaxRecvMsgSize(512<<10), grpc.MaxSendMsgSize(512<<10))
 	wire.RegisterExtMcpServer(grpcServer, &gateway.Hooks{API: api})
-	httpServer := &http.Server{Addr: setting("AUTHRAIL_GATEWAY_LISTEN", ":3019"), Handler: telemetry.HTTP("gateway.dispatch", dispatcher.Handler()), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 70 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10}
+	httpMux := http.NewServeMux()
+	httpMux.Handle("/discover", telemetry.HTTP("gateway.discovery", gateway.NewDiscovery(api).Handler()))
+	httpMux.Handle("/", telemetry.HTTP("gateway.dispatch", dispatcher.Handler()))
+	httpServer := &http.Server{Addr: setting("AUTHRAIL_GATEWAY_LISTEN", ":3019"), Handler: httpMux, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 70 * time.Second, IdleTimeout: 30 * time.Second, MaxHeaderBytes: 16 << 10}
 	go func() {
 		if err := grpcServer.Serve(listener); err != nil {
 			slog.Error("Gateway hook listener stopped")

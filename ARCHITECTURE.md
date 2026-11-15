@@ -55,6 +55,20 @@ The API checks live account-management permission; the person signs in and
 completes provider consent, reconnect or disconnect. Link creation and page
 opening do not change account access or disclose credentials.
 
+Custom MCP is a connection option within the same product. Separate named tools
+list saved server status and tool names or open an authenticated human handoff.
+They never accept account tokens, server addresses or tool-publication authority
+from an assistant. Exact schemas remain in the human review page and private API.
+
+The private adapter's discovery operation initializes a public HTTPS server and
+reads bounded tool pages using the account's own bearer access. It pins public
+DNS, validates TLS and rejects redirects and destination changes. Before a Custom
+business dispatch, it compares the current tool with the exact reviewed definition.
+Changed or missing tools withdraw the original review; unavailable discovery stops
+dispatch without claiming the business action failed. Server annotations grant no
+authority, required task execution is unavailable, and no automatic provider retry
+contract is inferred from MCP metadata.
+
 ## Authentication and transport
 
 The API owns OAuth authorization codes, S256 PKCE, exact callbacks, opaque access
@@ -125,8 +139,8 @@ applied to A2A as if the protocols were interchangeable.
 The pinned private MCP hop negotiates `2025-11-25` with the gateway's stateful
 listener. The management listener retains its own supported protocol versions.
 Generated ExtMCP wire bindings come from the same published gateway tag; the
-gateway implementation is not forked. Public root naming and customer tool
-publication remain separate integration contracts.
+gateway implementation is not forked. Custom review publishes private routes;
+public root naming and assistant business execution remain separate contracts.
 
 The hosted path reuses the sidecar's Go evaluation engine. The API coordinates
 that check and retains permission through one calling operation: resolve current

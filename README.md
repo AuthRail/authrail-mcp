@@ -1,5 +1,11 @@
 # AuthRail MCP
 
+Custom MCP connections let a person register a public HTTPS server using bearer
+access, discover its tools and review exact tool-to-action bindings in AuthRail.
+Assistant tools expose saved status and secure human handoffs. The private adapter
+supports discovery and checks reviewed tool definitions before delivery. This does
+not add public business dispatch; that remains separate from management tools.
+
 AuthRail MCP lets you work with your AuthRail organisation through an assistant.
 You can ask it to inspect recorded actions, prepare a Rail for a connected
 tool or investigate the proof behind a Framework assessment. It signs in with your account and

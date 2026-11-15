@@ -5,8 +5,10 @@ API owns identity, permissions, business rules and durable records. The tenant
 client provides sign-in, consent and exact human review.
 
 [API.md](API.md) lists implemented endpoints and tools. The shared product story
-and plan describe the intended hosted MCP/A2A path; the gateway and hosted
-execution path are not implemented by the current management listener.
+and plan describe the hosted MCP/A2A journey. The public listener serves
+management tools. A separate private adapter and pinned standalone gateway
+transport already-authorized work; the public listener does not yet expose
+connected business-tool execution.
 
 ```mermaid
 flowchart LR
@@ -46,6 +48,12 @@ The management transport is stateless. It does not retain workspace choices or
 business execution state between requests. The current resource uses `/mcp`.
 Changing to the planned public root entry requires listener, OAuth resource,
 audience, discovery and client settings to change together.
+
+Account management has separate `connections.manage` consent. The assistant
+can find provider setup options and request a fixed AuthRail browser link.
+The API checks live account-management permission; the person signs in and
+completes provider consent, reconnect or disconnect. Link creation and page
+opening do not change account access or disclose credentials.
 
 ## Authentication and transport
 
@@ -88,7 +96,37 @@ reads use saved collection status and do not call providers. Tokens, provider
 credentials, private assertions and application approval material are excluded
 from ordinary tool results.
 
-## Hosted execution direction
+## Hosted evaluation and private dispatch
+
+The private adapter accepts only an API-issued ticket for an existing saved
+execution. The API derives the target, method, exact arguments and deadline from
+that execution and a reviewed route bound to its Operation and account revision.
+The gateway does not select an account from tool arguments. Collection credentials
+alone do not create a reviewed business route.
+
+The adapter synchronizes bounded routing configuration into a private Docker
+volume. Upstream DNS results must be public and are pinned in the gateway's
+backend configuration, with the original TLS server name and Host retained.
+The volume also owns a persistent encrypted-session key. Every dispatch creates
+its own client session; session state never substitutes for API authority.
+
+ExtMCP request hooks recheck current authority and consume a one-use delivery
+record before the business call. Handshake credentials also cover protocol
+notifications that do not run request hooks. Response hooks retain a digest;
+the adapter reports transport and JSON-RPC failures separately because those do
+not always run response hooks. Missing outcomes become unknown on the original
+Action. Neither a response digest nor HTTP success authorizes result release.
+
+A2A uses a separate JSON-RPC route and the same private dispatch authority.
+Current transport supports bounded `message/send`; streaming, task delegation
+and interrupted-task continuation retain their own lifecycle. MCP hooks are not
+applied to A2A as if the protocols were interchangeable.
+
+The pinned private MCP hop negotiates `2025-11-25` with the gateway's stateful
+listener. The management listener retains its own supported protocol versions.
+Generated ExtMCP wire bindings come from the same published gateway tag; the
+gateway implementation is not forked. Public root naming and customer tool
+publication remain separate integration contracts.
 
 The hosted path reuses the sidecar's Go evaluation engine. The API coordinates
 that check and retains permission through one calling operation: resolve current

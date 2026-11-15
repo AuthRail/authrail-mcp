@@ -5,6 +5,7 @@ import (
 	"errors"
 	"flag"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/knadh/koanf/providers/confmap"
@@ -21,6 +22,7 @@ type Config struct {
 	ServiceToken           string
 	ServiceTokenFile       string
 	AllowLoopback          bool
+	TrustedAPIOrigin       string
 }
 
 // Load reads defaults, environment values, then explicit command-line flags.
@@ -44,6 +46,7 @@ func Load(args []string) (Config, error) {
 	credential := flags.String("service-token-file", k.String("service_token_file"), "Owner-private service credential file")
 	local := flags.String("allow-loopback", k.String("allow_loopback"), "Permit HTTP loopback development URLs")
 	legacyLocal := flags.Bool("local", false, "Permit HTTP loopback development URLs")
+	trustedAPI := flags.String("trusted-api-origin", k.String("trusted_api_origin"), "Exact private AuthRail API HTTP origin")
 	if err := flags.Parse(args); err != nil {
 		return Config{}, errors.New("invalid MCP command-line options")
 	}
@@ -54,6 +57,10 @@ func Load(args []string) (Config, error) {
 		return Config{}, errors.New("AUTHRAIL_MCP_ALLOW_LOOPBACK must be true or false")
 	}
 	c := Config{Listen: *listen, APIURL: *api, ResourceURL: *resource, AuthorizationServerURL: *issuer, ServiceToken: k.String("service_token"), ServiceTokenFile: *credential, AllowLoopback: *local == "true" || *legacyLocal}
+	c.TrustedAPIOrigin = *trustedAPI
+	if c.ServiceToken == "" && c.ServiceTokenFile == "" {
+		c.ServiceToken = os.Getenv("MCP_SERVICE_TOKEN")
+	}
 	if c.APIURL == "" || c.ResourceURL == "" {
 		return Config{}, errors.New("AUTHRAIL_MCP_API_URL and AUTHRAIL_MCP_RESOURCE_URL are required")
 	}

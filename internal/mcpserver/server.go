@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"context"
 	"encoding/json"
+	"net"
 	"net/http"
 	"net/url"
 	"slices"
@@ -48,6 +49,9 @@ func toolServer(backend *Backend, identity Identity) *mcp.Server {
 	if slices.Contains(identity.Scopes, ConnectionsScope) {
 		addConnectionTools(server, backend)
 	}
+	if slices.Contains(identity.Scopes, ConnectionsManageScope) {
+		addConnectionManagementTools(server, backend)
+	}
 	if slices.Contains(identity.Scopes, RuntimeReadScope) {
 		addRuntimeRecordTools(server, backend)
 	}
@@ -87,7 +91,7 @@ func Handler(backend *Backend) http.Handler {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"resource": backend.resource, "authorization_servers": []string{backend.issuer}, "scopes_supported": []string{Scope, GovernanceScope, ConnectionsScope, RuntimeDraftsScope, RuntimeReadScope, RuntimeDeploymentsScope, RuntimeApprovalsScope}, "bearer_methods_supported": []string{"header"}, "resource_name": "AuthRail"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"resource": backend.resource, "authorization_servers": []string{backend.issuer}, "scopes_supported": []string{Scope, GovernanceScope, ConnectionsScope, ConnectionsManageScope, RuntimeDraftsScope, RuntimeReadScope, RuntimeDeploymentsScope, RuntimeApprovalsScope}, "bearer_methods_supported": []string{"header"}, "resource_name": "AuthRail"})
 	})
 	mux.HandleFunc("/health/live", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -96,7 +100,18 @@ func Handler(backend *Backend) http.Handler {
 		}
 		w.WriteHeader(http.StatusNoContent)
 	})
+	mux.HandleFunc("GET /health/ready", func(w http.ResponseWriter, r *http.Request) {
+		if !backend.Ready(r.Context()) {
+			http.Error(w, "API unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.Header.Get("Origin") == "" && localHealthRequest(r) && (r.URL.Path == "/health/live" || r.URL.Path == "/health/ready") {
+			mux.ServeHTTP(w, r)
+			return
+		}
 		// We check Host and Origin so an unrelated website cannot reach this listener.
 		// Native clients can omit Origin.
 		if !strings.EqualFold(r.Host, resource.Host) {
@@ -115,6 +130,19 @@ func Handler(backend *Backend) http.Handler {
 		r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
 		mux.ServeHTTP(w, r)
 	})
+}
+func localHealthRequest(r *http.Request) bool {
+	host, _, err := net.SplitHostPort(r.Host)
+	if err != nil {
+		host = r.Host
+	}
+	remote, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return false
+	}
+	source := net.ParseIP(remote)
+	destination := net.ParseIP(host)
+	return source != nil && source.IsLoopback() && (host == "localhost" || destination != nil && destination.IsLoopback())
 }
 func requestIdentity(ctx context.Context) (string, Identity) {
 	info := auth.TokenInfoFromContext(ctx)

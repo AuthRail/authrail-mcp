@@ -162,6 +162,17 @@ collection is working; it does not establish a passing Test or ready Framework.
 
 ## Run the management service
 
+For local source development, the existing AuthRail Compose project also owns
+the MCP server, private gateway adapter and pinned agentgateway. From
+`authrail-server`, build/start `mcp`, `gateway-adapter` and `agentgateway` after
+applying the normal database migrations. Their shared internal service credential
+comes from protected configuration; provider credentials are not placed in
+gateway configuration. Only the management MCP listener is bound to a host port.
+
+This local transport is source functionality. It does not make the proposed
+public hosted business-tool journey available. Reviewed account/tool publication
+and customer business dispatch have their own owning product flows.
+
 The following setup is for the installation operator. It requires Go 1.26.5 or
 newer and a service credential provisioned by the AuthRail API operator:
 

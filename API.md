@@ -11,6 +11,28 @@ Read OAuth protected-resource metadata.
 Check process liveness.
 `GET /health/live`
 
+Check API availability from the MCP service.
+`GET /health/ready`
+
+## Private gateway adapter
+
+Send one API-issued ticket through its reviewed MCP or A2A route. This private
+endpoint returns `result_pending_check`; it does not release a result to an
+assistant or establish that the business action succeeded.
+`POST /dispatch`
+
+Check adapter liveness.
+`GET /health/live`
+
+Check that the adapter has recently synchronized reviewed routing configuration.
+`GET /health/ready`
+
+The separate adapter listener requires the internal service credential for
+dispatch. Its private gRPC listener implements the pinned gateway's
+`agentgateway.dev.ext_mcp.ExtMcp/CheckRequest` and
+`agentgateway.dev.ext_mcp.ExtMcp/CheckResponse` methods. These are protocol
+callbacks, not public HTTP routes or MCP tools.
+
 ## MCP tools
 
 All tools require `workspace.read`. The headings identify additional consent.
@@ -36,6 +58,17 @@ List provider Connections and their saved health.
 
 Read one provider Connection’s saved status.
 `authrail_get_connection_status`
+
+### Account setup — `connections.manage`
+
+Find available provider setup options and exact definition versions.
+`authrail_list_connection_providers`
+
+Open a secure page for a person to connect, reconnect or disconnect an account.
+`authrail_manage_connection`
+
+The handoff does not change account access. Provider consent, credential entry and
+disconnect confirmation happen in the authenticated application.
 
 ### Actions and Rails — `runtime.drafts`
 

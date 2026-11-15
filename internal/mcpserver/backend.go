@@ -38,6 +38,7 @@ type Config struct {
 	ResourceURL            string
 	ServiceToken           string
 	AllowLoopback          bool
+	TrustedAPIOrigin       string
 }
 
 type Backend struct {
@@ -87,7 +88,8 @@ func NewBackend(config Config) (*Backend, error) {
 			return nil, errors.New("AuthRail API URL must be an origin without a path")
 		}
 		loopback := u.Hostname() == "127.0.0.1" || u.Hostname() == "::1" || u.Hostname() == "localhost"
-		if u.Scheme != "https" && !(config.AllowLoopback && loopback && u.Scheme == "http") {
+		trustedAPI := endpoint.raw == config.APIURL && config.TrustedAPIOrigin != "" && config.TrustedAPIOrigin == config.APIURL && u.Scheme == "http"
+		if u.Scheme != "https" && !(config.AllowLoopback && loopback && u.Scheme == "http") && !trustedAPI {
 			return nil, errors.New("AuthRail URLs require HTTPS; HTTP loopback needs explicit opt-in")
 		}
 	}
@@ -153,6 +155,22 @@ func (b *Backend) call(ctx context.Context, method, path, bearer, org string, in
 		return errBackend
 	}
 	return nil
+}
+
+// Ready checks API availability without borrowing a customer's identity.
+func (b *Backend) Ready(ctx context.Context) bool {
+	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, b.origin+"/health/ready", nil)
+	if err != nil {
+		return false
+	}
+	response, err := b.client.Do(request)
+	if err != nil {
+		return false
+	}
+	defer response.Body.Close()
+	return response.StatusCode == http.StatusOK
 }
 
 // Introspect asks AuthRail to validate the token for each request.

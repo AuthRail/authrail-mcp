@@ -12,10 +12,18 @@ import (
 	"time"
 
 	"github.com/AuthRail/authrail-mcp/internal/config"
+	"github.com/AuthRail/authrail-mcp/internal/healthprobe"
 	"github.com/AuthRail/authrail-mcp/internal/mcpserver"
+	"github.com/AuthRail/authrail-mcp/internal/telemetry"
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "health" {
+		if healthprobe.Run("http://127.0.0.1:3016/health/ready") != nil {
+			os.Exit(1)
+		}
+		return
+	}
 	settings, err := config.Load(os.Args[1:])
 	if err != nil {
 		slog.Error("Invalid MCP configuration", "error", err)
@@ -29,12 +37,18 @@ func main() {
 			os.Exit(1)
 		}
 	}
-	backend, err := mcpserver.NewBackend(mcpserver.Config{APIURL: settings.APIURL, ResourceURL: settings.ResourceURL, AuthorizationServerURL: settings.AuthorizationServerURL, ServiceToken: token, AllowLoopback: settings.AllowLoopback})
+	backend, err := mcpserver.NewBackend(mcpserver.Config{APIURL: settings.APIURL, ResourceURL: settings.ResourceURL, AuthorizationServerURL: settings.AuthorizationServerURL, ServiceToken: token, AllowLoopback: settings.AllowLoopback, TrustedAPIOrigin: settings.TrustedAPIOrigin})
 	if err != nil {
 		slog.Error("Invalid MCP configuration", "error", err)
 		os.Exit(1)
 	}
-	server := &http.Server{Addr: settings.Listen, Handler: mcpserver.Handler(backend), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
+	shutdownTelemetry := telemetry.Start(context.Background(), "authrail-mcp")
+	defer func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_ = shutdownTelemetry(ctx)
+	}()
+	server := &http.Server{Addr: settings.Listen, Handler: telemetry.HTTP("mcp.request", mcpserver.Handler(backend)), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 15 * time.Second, WriteTimeout: 30 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	go func() {

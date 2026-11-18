@@ -69,7 +69,7 @@ List saved customer MCP connections without contacting their servers.
 Read saved tool names and review status for one customer MCP connection.
 `authrail_get_custom_connection`
 
-List the selected native business providers without connecting an account.
+List the selected native business providers, including HubSpot, without connecting an account.
 `authrail_list_business_providers`
 
 List saved native business accounts.

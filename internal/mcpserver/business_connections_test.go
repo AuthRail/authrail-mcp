@@ -42,7 +42,8 @@ func TestBusinessAccountsKeepReadConsentSeparateFromHumanHandoff(t *testing.T) {
 					data := map[string]any{"records": []any{}, "pageInfo": map[string]any{"hasNextPage": false}}
 					if strings.HasSuffix(r.URL.Path, "/handoff") {
 						var body map[string]string
-						if json.NewDecoder(r.Body).Decode(&body) != nil || len(body) != 2 || body["action"] != "review" || body["connectionId"] != connectionID || r.Method != http.MethodPost {
+						if json.NewDecoder(r.Body).Decode(&body) != nil || len(body) != 2 || r.Method != http.MethodPost ||
+							!(body["action"] == "review" && body["connectionId"] == connectionID || body["action"] == "connect" && body["providerKey"] == "hubspot") {
 							t.Error("unsafe handoff payload")
 							w.WriteHeader(400)
 							return
@@ -110,10 +111,11 @@ func TestBusinessAccountsKeepReadConsentSeparateFromHumanHandoff(t *testing.T) {
 				}
 			} else {
 				call("authrail_manage_business_account", map[string]any{"action": "review", "connectionId": connectionID}, false)
+				call("authrail_manage_business_account", map[string]any{"action": "connect", "providerKey": "hubspot"}, false)
 				for _, args := range []map[string]any{{"action": "connect", "connectionId": connectionID}, {"action": "review"}, {"action": "connect", "providerKey": "unknown"}, {"action": "access", "connectionId": connectionID, "providerKey": "stripe"}, {"action": "review", "connectionId": connectionID, "endpoint": "https://unreviewed.example.test"}, {"action": "disconnect", "connectionId": connectionID, "credential": "secret"}} {
 					call("authrail_manage_business_account", args, true)
 				}
-				if delegated.Load() != 1 || handoffs.Load() != 1 {
+				if delegated.Load() != 2 || handoffs.Load() != 2 {
 					t.Fatal("invalid handoff reached account API")
 				}
 			}

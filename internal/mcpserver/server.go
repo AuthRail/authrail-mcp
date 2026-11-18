@@ -56,6 +56,9 @@ func toolServer(backend *Backend, identity Identity) *mcp.Server {
 		addCustomConnectionManagementTools(server, backend)
 		addBusinessConnectionManagementTools(server, backend)
 	}
+	if slices.Contains(identity.Scopes, BusinessToolsReadScope) {
+		addBusinessTools(server, backend)
+	}
 	if slices.Contains(identity.Scopes, RuntimeReadScope) {
 		addRuntimeRecordTools(server, backend)
 	}
@@ -74,7 +77,7 @@ func toolServer(backend *Backend, identity Identity) *mcp.Server {
 // Handler serves MCP requests and checks each connection with AuthRail.
 func Handler(backend *Backend) http.Handler {
 	resource, _ := url.Parse(backend.resource)
-	metadataURL := resource.Scheme + "://" + resource.Host + "/.well-known/oauth-protected-resource/mcp"
+	metadataURL := resource.Scheme + "://" + resource.Host + "/.well-known/oauth-protected-resource"
 	transport := mcp.NewStreamableHTTPHandler(func(r *http.Request) *mcp.Server {
 		_, identity := requestIdentity(r.Context())
 		return toolServer(backend, identity)
@@ -88,14 +91,14 @@ func Handler(backend *Backend) http.Handler {
 			Extra: map[string]any{"identity": identity, "token": token}}, nil
 	}, &auth.RequireBearerTokenOptions{ResourceMetadataURL: metadataURL, Scopes: []string{Scope}})(transport)
 	mux := http.NewServeMux()
-	mux.Handle("/mcp", protected)
-	mux.HandleFunc("/.well-known/oauth-protected-resource/mcp", func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("/{$}", protected)
+	mux.HandleFunc("/.well-known/oauth-protected-resource", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"resource": backend.resource, "authorization_servers": []string{backend.issuer}, "scopes_supported": []string{Scope, GovernanceScope, ConnectionsScope, ConnectionsManageScope, RuntimeDraftsScope, RuntimeReadScope, RuntimeDeploymentsScope, RuntimeApprovalsScope}, "bearer_methods_supported": []string{"header"}, "resource_name": "AuthRail"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"resource": backend.resource, "authorization_servers": []string{backend.issuer}, "scopes_supported": []string{Scope, GovernanceScope, ConnectionsScope, ConnectionsManageScope, BusinessToolsReadScope, RuntimeDraftsScope, RuntimeReadScope, RuntimeDeploymentsScope, RuntimeApprovalsScope}, "bearer_methods_supported": []string{"header"}, "resource_name": "AuthRail"})
 	})
 	mux.HandleFunc("/health/live", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -112,6 +115,14 @@ func Handler(backend *Backend) http.Handler {
 		w.WriteHeader(http.StatusNoContent)
 	})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Reject unknown and noncanonical paths before ServeMux can redirect or
+		// treat the root transport as a fallback for an old endpoint.
+		switch r.URL.EscapedPath() {
+		case "/", "/.well-known/oauth-protected-resource", "/health/live", "/health/ready":
+		default:
+			http.NotFound(w, r)
+			return
+		}
 		if r.Method == http.MethodGet && r.Header.Get("Origin") == "" && localHealthRequest(r) && (r.URL.Path == "/health/live" || r.URL.Path == "/health/ready") {
 			mux.ServeHTTP(w, r)
 			return

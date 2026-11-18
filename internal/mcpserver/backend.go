@@ -74,15 +74,18 @@ func NewBackend(config Config) (*Backend, error) {
 	if config.AuthorizationServerURL == "" {
 		config.AuthorizationServerURL = strings.TrimRight(config.APIURL, "/") + "/auth"
 	}
-	for _, endpoint := range []struct{ raw, path string }{
-		{config.APIURL, ""}, {config.ResourceURL, "/mcp"}, {config.AuthorizationServerURL, ""},
+	for _, endpoint := range []struct {
+		raw      string
+		resource bool
+	}{
+		{config.APIURL, false}, {config.ResourceURL, true}, {config.AuthorizationServerURL, false},
 	} {
 		u, err := url.Parse(endpoint.raw)
 		if err != nil || u.Host == "" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" || u.RawPath != "" {
 			return nil, errors.New("invalid AuthRail URL")
 		}
-		if endpoint.path != "" && u.Path != endpoint.path {
-			return nil, errors.New("MCP resource URL must end with /mcp")
+		if endpoint.resource && u.Path != "" {
+			return nil, errors.New("MCP resource URL must be an origin without a path or trailing slash")
 		}
 		if endpoint.raw == config.APIURL && u.Path != "" {
 			return nil, errors.New("AuthRail API URL must be an origin without a path")

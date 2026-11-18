@@ -45,9 +45,10 @@ The private service credential authenticates introspection and exchange; it
 supplies no customer permission by itself.
 
 The management transport is stateless. It does not retain workspace choices or
-business execution state between requests. The current resource uses `/mcp`.
-Changing to the planned public root entry requires listener, OAuth resource,
-audience, discovery and client settings to change together.
+business execution state between requests. The resource is the canonical root origin `https://mcp.authrail.io`, without a
+path or trailing slash. HTTP requests use `/` and metadata uses
+`/.well-known/oauth-protected-resource`. Old `/mcp` grants remain distinct and
+require reconnection; no token or consent is silently migrated.
 
 Account management has separate `connections.manage` consent. The assistant
 can find provider setup options and request a fixed AuthRail browser link.
@@ -232,12 +233,23 @@ dispatch and protected result release remain in their owning integration slices.
 
 ## Listener and resource configuration
 
-The agreed public assistant address is https://mcp.authrail.io, without an /mcp
-suffix. README product guidance uses that address. The source listener still
-mounts POST /mcp and resource discovery at
-/.well-known/oauth-protected-resource/mcp; its resource validator requires the
-matching /mcp OAuth identifier. These wire contracts are described in API.md.
-An operator running this source must use a matching listener/resource/API
-configuration. The root listener, discovery metadata, resource validator, OAuth
-audience and assistant settings change together in slice 13. Documentation alone
-does not change the mounted service or establish public availability.
+The public assistant address is https://mcp.authrail.io. The listener accepts the
+exact root path, publishes root protected-resource metadata and uses that exact
+canonical origin as its OAuth resource/audience. Configuration rejects `/mcp`,
+trailing slashes and other paths. Browser `/mcp/connect` remains the human consent
+page; it is not the protocol endpoint. This local source does not establish a
+public deployment.
+
+The optional `business.tools.read` consent exposes two typed discovery tools.
+The API derives organisation/user identity from exact named-tool delegation. The
+Connections catalogue checks live account grants, selected credential generation,
+reviewed operation contracts, active visible application revisions and current
+source fingerprints before returning safe names or exact contracts. It does not
+load credential ciphertext or contact a provider. Route IDs paginate bounded
+pages; stale routes can yield an empty page with a continuation cursor. Discovery
+is a current snapshot and never permission to execute. Hosted business dispatch
+and result release remain slice14.
+
+Consent selections are bound to signed request, user, session and organisation.
+Changing that context clears optional choices and fences pending browser responses.
+Legacy resource connections remain listed and revocable with reconnect guidance.

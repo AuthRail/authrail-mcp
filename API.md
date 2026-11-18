@@ -3,10 +3,10 @@
 ## HTTP endpoints
 
 Send authenticated MCP JSON-RPC requests over Streamable HTTP.
-`POST /mcp`
+`POST /`
 
 Read OAuth protected-resource metadata.
-`GET /.well-known/oauth-protected-resource/mcp`
+`GET /.well-known/oauth-protected-resource`
 
 Check process liveness.
 `GET /health/live`
@@ -54,6 +54,17 @@ Read the connected organisation and account.
 
 Read released SDK installation guidance.
 `authrail_get_sdk_integrations`
+
+### Reviewed business tools — `business.tools.read`
+
+List currently reviewed tools available under the caller's account and application access.
+`authrail_list_available_tools`
+
+Read one available tool's exact reviewed input/result contracts.
+`authrail_get_available_tool`
+
+These reads do not execute a provider operation or grant account access. A page
+can be empty with a continuation cursor when stale contracts are filtered.
 
 ### Accounts — `connections.read`
 

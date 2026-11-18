@@ -52,7 +52,7 @@ func TestGuardProtectionsUseConsentedDelegation(t *testing.T) {
 			}))
 			defer api.Close()
 			endpoint := httptest.NewUnstartedServer(nil)
-			resource := "http://" + endpoint.Listener.Addr().String() + "/mcp"
+			resource := "http://" + endpoint.Listener.Addr().String()
 			backend, err := NewBackend(Config{APIURL: api.URL, ResourceURL: resource, ServiceToken: strings.Repeat("s", 32), AllowLoopback: true})
 			if err != nil {
 				t.Fatal(err)
@@ -178,7 +178,7 @@ func TestDataDraftToolsUseBoundedNamedRoutes(t *testing.T) {
 			}))
 			defer api.Close()
 			endpoint := httptest.NewUnstartedServer(nil)
-			resource := "http://" + endpoint.Listener.Addr().String() + "/mcp"
+			resource := "http://" + endpoint.Listener.Addr().String()
 			backend, err := NewBackend(Config{APIURL: api.URL, ResourceURL: resource, ServiceToken: strings.Repeat("s", 32), AllowLoopback: true})
 			if err != nil {
 				t.Fatal(err)
@@ -270,7 +270,7 @@ func TestRuntimeRecordReadHasSeparateConsent(t *testing.T) {
 			}))
 			defer api.Close()
 			endpoint := httptest.NewUnstartedServer(nil)
-			resource := "http://" + endpoint.Listener.Addr().String() + "/mcp"
+			resource := "http://" + endpoint.Listener.Addr().String()
 			backend, err := NewBackend(Config{APIURL: api.URL, ResourceURL: resource, ServiceToken: strings.Repeat("s", 32), AllowLoopback: true})
 			if err != nil {
 				t.Fatal(err)

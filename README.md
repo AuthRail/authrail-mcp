@@ -223,8 +223,11 @@ export AUTHRAIL_MCP_SERVICE_TOKEN_FILE=/run/secrets/authrail-mcp-service-token
 ```
 
 Replace the example API address with your installation's address and set
-`AUTHRAIL_MCP_RESOURCE_URL` to its configured OAuth resource identifier before
-starting the process. The API's `MCP_RESOURCE_URL` must match that identifier.
+`AUTHRAIL_MCP_RESOURCE_URL` to its canonical root OAuth resource identifier (for
+example `https://mcp.authrail.io`, without a path or trailing slash) before
+starting the process. The API's `MCP_RESOURCE_URL` must match that identifier. Compose also uses
+`MCP_AUTHORIZATION_SERVER_URL` for the exact API-advertised issuer, including
+its `/auth` path; it must not append another `/auth` to an existing issuer.
 The [service configuration reference](ARCHITECTURE.md#listener-and-resource-configuration)
 defines the listener and resource settings together. The mounted credential
 must match the API's private MCP service credential and be readable only by its

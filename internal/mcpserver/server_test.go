@@ -6,6 +6,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -18,6 +19,63 @@ func (b bearerTransport) RoundTrip(r *http.Request) (*http.Response, error) {
 	clone := r.Clone(r.Context())
 	clone.Header.Set("Authorization", "Bearer "+b.token)
 	return http.DefaultTransport.RoundTrip(clone)
+}
+
+func TestRootResourceRejectsLegacyAndNoncanonicalURLs(t *testing.T) {
+	for _, resource := range []string{"https://mcp.authrail.io/mcp", "https://mcp.authrail.io/", "https://mcp.authrail.io/path", "https://mcp.authrail.io?token=value", "https://mcp.authrail.io/#fragment"} {
+		t.Run(resource, func(t *testing.T) {
+			if _, err := NewBackend(Config{APIURL: "https://api.authrail.io", ResourceURL: resource, ServiceToken: strings.Repeat("s", 32)}); err == nil {
+				t.Fatal("noncanonical public resource accepted")
+			}
+		})
+	}
+	if _, err := NewBackend(Config{APIURL: "https://api.authrail.io", ResourceURL: "https://mcp.authrail.io", ServiceToken: strings.Repeat("s", 32)}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRootListenerPublishesExactMetadataAndRejectsPathAliases(t *testing.T) {
+	backend, err := NewBackend(Config{APIURL: "https://api.authrail.io", ResourceURL: "https://mcp.authrail.io", ServiceToken: strings.Repeat("s", 32)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := Handler(backend)
+	metadataPath := "/.well-known/oauth-protected-resource"
+	metadata := httptest.NewRecorder()
+	handler.ServeHTTP(metadata, httptest.NewRequest(http.MethodGet, "https://mcp.authrail.io"+metadataPath, nil))
+	var document struct {
+		Resource             string   `json:"resource"`
+		AuthorizationServers []string `json:"authorization_servers"`
+		ScopesSupported      []string `json:"scopes_supported"`
+	}
+	if metadata.Code != http.StatusOK || json.Unmarshal(metadata.Body.Bytes(), &document) != nil ||
+		document.Resource != "https://mcp.authrail.io" || !slices.Equal(document.AuthorizationServers, []string{"https://api.authrail.io/auth"}) ||
+		!slices.Contains(document.ScopesSupported, BusinessToolsReadScope) {
+		t.Fatalf("incorrect root metadata: %d %s", metadata.Code, metadata.Body.String())
+	}
+	for _, method := range []string{http.MethodGet, http.MethodPost} {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(method, "https://mcp.authrail.io/", nil))
+		if response.Code != http.StatusUnauthorized || !strings.Contains(response.Header().Get("WWW-Authenticate"), `resource_metadata="https://mcp.authrail.io`+metadataPath+`"`) {
+			t.Fatalf("missing root authorization challenge: %d %s", response.Code, response.Header())
+		}
+	}
+	for _, path := range []string{"/mcp", "/mcp/", metadataPath + "/mcp", "/unexpected", "//", "/./", "/%2f", "/%2e/", "/.well-known/%6fauth-protected-resource"} {
+		response := httptest.NewRecorder()
+		handler.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "https://mcp.authrail.io"+path, strings.NewReader(`{}`)))
+		if response.Code != http.StatusNotFound || response.Header().Get("Location") != "" {
+			t.Errorf("path %s accepted or redirected: %d %s", path, response.Code, response.Header())
+		}
+	}
+	for _, origin := range []string{"null", "https://attacker.invalid", "https://mcp.authrail.io/"} {
+		response := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodGet, "https://mcp.authrail.io/", nil)
+		request.Header.Set("Origin", origin)
+		handler.ServeHTTP(response, request)
+		if response.Code != http.StatusForbidden {
+			t.Errorf("unsafe origin accepted: %s", origin)
+		}
+	}
 }
 
 // We check that calls keep the signed-in user and workspace, including after revocation.
@@ -57,7 +115,7 @@ func TestConnectedToolsRecheckAuthorityAndIsolateIdentity(t *testing.T) {
 	}))
 	defer api.Close()
 	endpoint := httptest.NewUnstartedServer(nil)
-	resource := "http://" + endpoint.Listener.Addr().String() + "/mcp"
+	resource := "http://" + endpoint.Listener.Addr().String()
 	backend, err := NewBackend(Config{APIURL: api.URL, ResourceURL: resource, ServiceToken: strings.Repeat("s", 32), AllowLoopback: true})
 	if err != nil {
 		t.Fatal(err)
@@ -138,7 +196,7 @@ func TestBackendRejectsRedirectsAndOversizedResponses(t *testing.T) {
 				_ = json.NewEncoder(w).Encode(Workspace{Organisation: NamedIdentity{ID: "wrong-tenant"}, User: NamedIdentity{ID: "wrong-user"}, Permissions: []string{Scope}})
 			}))
 			defer api.Close()
-			b, err := NewBackend(Config{APIURL: api.URL, ResourceURL: "https://mcp.example.test/mcp", ServiceToken: strings.Repeat("s", 32), AllowLoopback: true})
+			b, err := NewBackend(Config{APIURL: api.URL, ResourceURL: "https://mcp.example.test", ServiceToken: strings.Repeat("s", 32), AllowLoopback: true})
 			if err != nil {
 				t.Fatal(err)
 			}

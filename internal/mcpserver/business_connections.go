@@ -12,7 +12,7 @@ import (
 )
 
 // Keep these public setup identifiers aligned with the server's business registry.
-var businessProviderKeys = []string{"aws", "azure", "cloudflare", "github", "gitlab", "okta", "jamf", "crowdstrike", "snyk", "datadog", "splunk", "pagerduty", "snowflake", "knowbe4", "onetrust", "stripe", "openai", "azure-openai", "anthropic", "jira", "confluence", "notion", "linear", "asana", "gcp", "google-workspace", "xai"}
+var businessProviderKeys = []string{"aws", "azure", "cloudflare", "github", "gitlab", "okta", "jamf", "crowdstrike", "snyk", "datadog", "splunk", "pagerduty", "snowflake", "knowbe4", "onetrust", "stripe", "openai", "azure-openai", "anthropic", "jira", "confluence", "notion", "linear", "asana", "gcp", "google-workspace", "xai", "quickbooks"}
 
 type businessAccountHandoffInput struct {
 	Action       string `json:"action"`

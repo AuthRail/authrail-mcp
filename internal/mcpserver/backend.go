@@ -62,6 +62,7 @@ type NamedIdentity struct {
 	Name string `json:"name"`
 }
 type Workspace struct {
+	MCPURL       string        `json:"mcpUrl,omitempty"`
 	Organisation NamedIdentity `json:"organisation"`
 	User         NamedIdentity `json:"user"`
 	Permissions  []string      `json:"permissions"`

@@ -124,6 +124,21 @@ func TestDataDraftToolsUseBoundedNamedRoutes(t *testing.T) {
 		{"authrail_save_data_rail_draft", http.MethodPatch, "/organisation/mcp/rails/" + railID + "/data-drafts/" + versionID, map[string]any{"railId": railID, "versionId": versionID, "revision": 7, "name": "Check consent", "content": map[string]any{"formatVersion": 2, "examples": []any{}}}},
 		{"authrail_test_data_rail_draft", http.MethodPost, "/organisation/mcp/rails/" + railID + "/data-drafts/" + versionID + "/test", map[string]any{"railId": railID, "versionId": versionID, "revision": 7}},
 	}
+	policyCases := []struct {
+		name, method, path string
+		args               map[string]any
+	}{
+		{"authrail_list_rail_policy_sources", http.MethodGet, "/organisation/mcp/policy-rails/sources?cursor=page%2B2&limit=3&query=payment", map[string]any{"limit": 3, "query": "payment", "cursor": "page+2"}},
+		{"authrail_get_rail_policy_source", http.MethodGet, "/organisation/mcp/policy-rails/sources/" + sourceID + "/versions/" + versionID, map[string]any{"policyId": sourceID, "versionId": versionID}},
+		{"authrail_list_policy_rails", http.MethodGet, "/organisation/mcp/policy-rails?afterId=" + railID + "&limit=10", map[string]any{"afterId": railID, "limit": 10}},
+		{"authrail_get_policy_rail", http.MethodGet, "/organisation/mcp/policy-rails/" + railID, map[string]any{"railId": railID}},
+		{"authrail_get_policy_rail_history", http.MethodGet, "/organisation/mcp/policy-rails/" + railID + "/history?beforeVersionNumber=7&limit=10", map[string]any{"railId": railID, "beforeVersionNumber": 7, "limit": 10}},
+		{"authrail_list_policy_data_facts", http.MethodGet, "/organisation/mcp/policy-rails/data-facts?afterId=" + versionID + "&limit=10&operationVersionId=" + operationID, map[string]any{"operationVersionId": operationID, "afterId": versionID, "limit": 10}},
+		{"authrail_propose_policy_rail", http.MethodPost, "/organisation/mcp/policy-rails/proposals", map[string]any{"operationVersionId": operationID, "policyVersionId": versionID, "instructions": "Bound payment requests"}},
+		{"authrail_continue_policy_rail_draft", http.MethodPost, "/organisation/mcp/policy-rails/" + railID + "/drafts", map[string]any{"railId": railID, "operationVersionId": operationID, "policyVersionId": versionID, "basedOnVersionId": sourceID}},
+		{"authrail_review_policy_rail", http.MethodPost, "/organisation/mcp/policy-rails/" + railID + "/versions/" + versionID + "/review", map[string]any{"railId": railID, "versionId": versionID, "revision": 7}},
+	}
+	cases = append(cases, policyCases...)
 	for _, scope := range []bool{true, false} {
 		t.Run(map[bool]string{true: "consented", false: "no-consent"}[scope], func(t *testing.T) {
 			var calls atomic.Int32
@@ -160,7 +175,7 @@ func TestDataDraftToolsUseBoundedNamedRoutes(t *testing.T) {
 					if r.Method != item.method || r.URL.RequestURI() != item.path || r.Header.Get("X-Organisation-Id") != "org-1" {
 						t.Errorf("wrong Data route %s %s", r.Method, r.URL.RequestURI())
 					}
-					if r.Method == http.MethodPatch || tool == "authrail_test_data_rail_draft" {
+					if r.Method == http.MethodPatch || tool == "authrail_test_data_rail_draft" || tool == "authrail_review_policy_rail" {
 						var body map[string]any
 						_ = json.NewDecoder(r.Body).Decode(&body)
 						if body["revision"] != float64(7) || body["sourceId"] != nil || body["railId"] != nil || body["versionId"] != nil || body["operationId"] != nil {
@@ -226,6 +241,12 @@ func TestDataDraftToolsUseBoundedNamedRoutes(t *testing.T) {
 					result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "authrail_test_data_rail_draft", Arguments: invalid})
 					if err == nil && !result.IsError {
 						t.Fatal("invalid revision or agent tenant accepted")
+					}
+				}
+				for _, invalid := range []map[string]any{{"railId": railID, "versionId": versionID, "revision": 0}, {"railId": railID, "versionId": versionID, "revision": 7, "publish": true}, {"railId": railID, "versionId": versionID, "revision": 7, "organisationId": "org-2"}} {
+					result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "authrail_review_policy_rail", Arguments: invalid})
+					if err == nil && !result.IsError {
+						t.Fatal("review handoff accepted invalid revision, publication or agent-selected tenant")
 					}
 				}
 				if calls.Load() != expected {

@@ -15,6 +15,7 @@ import (
 
 type noArguments struct{}
 type connection struct {
+	MCPURL       string        `json:"mcpUrl,omitempty"`
 	ClientID     string        `json:"clientId"`
 	Organisation NamedIdentity `json:"organisation"`
 	User         NamedIdentity `json:"user"`
@@ -39,7 +40,7 @@ func toolServer(backend *Backend, identity Identity) *mcp.Server {
 			if err != nil {
 				return nil, connection{}, err
 			}
-			return nil, connection{ClientID: identity.ClientID, Organisation: workspace.Organisation, User: workspace.User, Scopes: identity.Scopes}, nil
+			return nil, connection{MCPURL: workspace.MCPURL, ClientID: identity.ClientID, Organisation: workspace.Organisation, User: workspace.User, Scopes: identity.Scopes}, nil
 		})
 	if slices.Contains(identity.Scopes, GovernanceScope) {
 		addFrameworkTools(server, backend)
@@ -67,6 +68,7 @@ func toolServer(backend *Backend, identity Identity) *mcp.Server {
 	}
 	if slices.Contains(identity.Scopes, RuntimeDraftsScope) {
 		addRuntimeDraftTools(server, backend)
+		addPolicyRailTools(server, backend)
 	}
 	if slices.Contains(identity.Scopes, RuntimeDeploymentsScope) {
 		addRuntimeDeploymentTools(server, backend)

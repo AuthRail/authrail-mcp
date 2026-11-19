@@ -179,6 +179,33 @@ Save a Policy Rail draft at its expected revision.
 Run saved examples for an exact Policy Rail draft revision.
 `authrail_test_policy_rail_draft`
 
+Find exact published Policy sources without Framework or Control setup.
+`authrail_list_rail_policy_sources`
+
+Read one exact published Policy source with its current audience.
+`authrail_get_rail_policy_source`
+
+Find current Policy Rails and their draft/published versions.
+`authrail_list_policy_rails`
+
+Read one Policy Rail before choosing an exact version.
+`authrail_get_policy_rail`
+
+Read retained published/superseded version history.
+`authrail_get_policy_rail_history`
+
+Find permitted published Data Rail facts for one exact reviewed action.
+`authrail_list_policy_data_facts`
+
+Suggest unsaved rules from exact sources and optional reviewed Data facts.
+`authrail_propose_policy_rail`
+
+Continue an unpublished draft; copy a retained version only with unchanged sources.
+`authrail_continue_policy_rail_draft`
+
+Request a workspace/revision-bound human review link. This never publishes or activates a Rail.
+`authrail_review_policy_rail`
+
 ### Information sources and Data Rails — `runtime.drafts`
 
 Read supported information-source options.

@@ -38,6 +38,7 @@ type Resolution struct {
 	ActionID     string         `json:"actionId"`
 	ReviewedTool *DiscoveryTool `json:"reviewedTool,omitempty"`
 	AttemptID    string         `json:"attemptId"`
+	A2A          *A2ABinding    `json:"a2a,omitempty"`
 }
 type RequestCheck struct {
 	Ticket    string `json:"ticket"`
@@ -54,11 +55,13 @@ type RequestPermission struct {
 	DeadlineAt    time.Time `json:"deadlineAt"`
 }
 type ResponseCheck struct {
-	AttemptToken string `json:"attemptToken"`
-	Target       string `json:"target"`
-	Protocol     string `json:"protocol"`
-	Method       string `json:"method"`
-	Result       string `json:"result"`
+	ReviewedContractValid *bool           `json:"reviewedContractValid,omitempty"`
+	AttemptToken          string          `json:"attemptToken"`
+	Target                string          `json:"target"`
+	Protocol              string          `json:"protocol"`
+	Method                string          `json:"method"`
+	Result                string          `json:"result"`
+	A2A                   *A2AObservation `json:"a2a,omitempty"`
 }
 type Failure struct {
 	Ticket string `json:"ticket"`

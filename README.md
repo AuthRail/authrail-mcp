@@ -71,7 +71,7 @@ membership and record visibility apply on every request. The MCP service calls
 the AuthRail API on your behalf; it has no direct database access or shared
 administrator account.
 
-## Connect an account or your own MCP server
+## Connect an account, MCP server or agent
 
 Ask the assistant to show available business providers or open account setup.
 The setup link takes you to AuthRail, where you supply access and choose the
@@ -84,6 +84,10 @@ and bearer access, discover its tools, then review their inputs and results
 against your business actions. A customer-owned MCP server is one connection
 option; named provider accounts have their own authorisation and setup.
 
+For an A2A agent, supply its HTTPS card address and bearer access in AuthRail,
+then review a selected skill against exact business input/result contracts. A card
+read is discovery evidence, not proof of the bearer token's execution permissions.
+
 The assistant can read saved account summaries and open setup, tool review,
 access replacement or disconnection. Credentials and final human confirmation
 stay on the authenticated page. Connecting an account does not grant every
@@ -93,6 +97,28 @@ review; disconnecting stops new use and retains history.
 Collection integrations remain available separately. Access granted to collect
 information does not authorise business writes. Each provider has its own account setup, permissions and credential requirements.
 Complete that setup before connecting the account.
+
+## Request a business action
+
+Grant reviewed-tool discovery and business-request access during assistant consent.
+Ask the assistant to find an available tool, inspect its exact contract and request
+one change using a stable request key. AuthRail saves the request, checks current
+access and Rails, and returns its status. A request can wait for human approval;
+continuation uses the original saved input and refreshes authority before execution.
+
+The assistant can read status, continue the saved request or request cancellation.
+Reading status does not run work. An unknown outcome is checked using its original
+reference; a new request key is not a safe retry. Results are released only after
+the reviewed result contract and result Rails pass. A withheld result cannot undo
+an effect that already happened.
+
+You can also connect a reviewed A2A agent through secure human setup. Current
+source supports JSON-input A2A 1.0 JSON-RPC recipients with manual bearer access
+and an interface on the same HTTPS origin as the agent card. You choose messaging,
+status and cancellation access separately. Files, streaming/push, tenant overrides,
+required extensions, text-only skills and OAuth acquisition are unsupported. Agent
+skills describe intended work; they do not restrict the recipient's internal tools.
+Source/local checks do not prove live recipient permissions or provider effects.
 
 ## Prepare and review Rails
 
@@ -155,6 +181,8 @@ Choose only the consent needed for your work:
 | Access | What the assistant can do |
 | --- | --- |
 | `workspace.read` | Read your connected workspace and available capabilities. Required for all tools. |
+| `business.tools.read` | Discover currently reviewed business tools and their exact contracts. |
+| `business.execute` | Request, inspect and continue original business work, or request cancellation. |
 | `connections.read` | Read saved account and connection summaries. |
 | `connections.manage` | Open secure human account setup and management. |
 | `runtime.drafts` | Prepare and check unpublished Rails and source drafts. |

@@ -16,6 +16,7 @@ type customConnectionHandoffInput struct {
 }
 
 func addCustomConnectionTools(server *mcp.Server, backend *Backend) {
+	addAgentConnectionTools(server, backend)
 	annotations := &mcp.ToolAnnotations{ReadOnlyHint: true}
 	mcp.AddTool(server, &mcp.Tool{Name: "authrail_list_custom_connections", Description: "List the connected workspace's Custom MCP connections and saved review status. This reads saved records; it does not contact a server, grant tool access or reveal credentials. Continue using pageInfo.nextCursor.", Annotations: annotations},
 		func(ctx context.Context, _ *mcp.CallToolRequest, input connectionListInput) (*mcp.CallToolResult, map[string]any, error) {
@@ -46,6 +47,7 @@ func addCustomConnectionTools(server *mcp.Server, backend *Backend) {
 }
 
 func addCustomConnectionManagementTools(server *mcp.Server, backend *Backend) {
+	addAgentConnectionManagementTools(server, backend)
 	mcp.AddTool(server, &mcp.Tool{Name: "authrail_manage_custom_connection", Description: "Open a secure AuthRail page to connect a Custom MCP server, review its tools, refresh its saved catalogue or disconnect it. The signed-in person must complete the action. This tool does not contact the server, publish tools or change account access. Never submit server addresses, credentials, passwords or tokens.", InputSchema: map[string]any{
 		"type": "object", "additionalProperties": false, "required": []string{"action"},
 		"properties": map[string]any{

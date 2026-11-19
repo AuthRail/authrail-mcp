@@ -24,6 +24,7 @@ import (
 )
 
 type Dispatcher struct {
+	toolDiscovery  func(context.Context, DiscoveryInput) (*DiscoverySnapshot, error)
 	api            *API
 	configuration  *Configuration
 	origin         string
@@ -190,73 +191,15 @@ func (d *Dispatcher) callHTTP(ctx context.Context, ticket string, resolution Res
 	return json.RawMessage(encoded), nil
 }
 
-func (d *Dispatcher) callA2A(ctx context.Context, ticket string, resolution Resolution) (json.RawMessage, error) {
-	// Streaming/task subscriptions need their own durable lifecycle, not a read-all fallback.
-	if resolution.Method != "SendMessage" && resolution.Method != "message/send" {
-		return nil, errBoundary
-	}
-	permission, err := d.api.request(ctx, RequestCheck{Ticket: ticket, Target: resolution.Target, Protocol: "a2a", Method: resolution.Method, Params: resolution.Params})
-	if err != nil || !validTicket(permission.AttemptToken) || !permission.DeadlineAt.After(time.Now()) {
-		return nil, errBoundary
-	}
-	body, err := json.Marshal(struct {
-		Version string          `json:"jsonrpc"`
-		ID      string          `json:"id"`
-		Method  string          `json:"method"`
-		Params  json.RawMessage `json:"params"`
-	}{"2.0", "authrail", resolution.Method, json.RawMessage(resolution.Params)})
-	if err != nil {
-		return nil, errBoundary
-	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, d.origin+"/a2a/"+resolution.Target, bytes.NewReader(body))
-	if err != nil {
-		return nil, errBoundary
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-	req.Header.Set(dispatchHeader, d.configuration.transportToken())
-	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(req.Header))
-	if resolution.Method == "SendMessage" {
-		req.Header.Set("A2A-Version", "1.0")
-	}
-	if permission.Authorization != nil {
-		req.Header.Set("Authorization", *permission.Authorization)
-	}
-	response, err := d.client.Do(req)
-	if err != nil {
-		return nil, errBoundary
-	}
-	defer response.Body.Close()
-	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return nil, errRPC
-	}
-	if response.Header.Get("Content-Type") != "" && !bytes.HasPrefix([]byte(response.Header.Get("Content-Type")), []byte("application/json")) {
-		return nil, errRPC
-	}
-	encoded, err := io.ReadAll(io.LimitReader(response.Body, maxBody/2+1))
-	if err != nil {
-		return nil, errBoundary
-	}
-	if len(encoded) > maxBody/2 {
-		return nil, errOversized
-	}
-	var reply struct {
-		Version string          `json:"jsonrpc"`
-		ID      string          `json:"id"`
-		Result  json.RawMessage `json:"result"`
-		Error   json.RawMessage `json:"error"`
-	}
-	if json.Unmarshal(encoded, &reply) != nil || reply.Version != "2.0" || reply.ID != "authrail" || len(reply.Result) == 0 || len(reply.Error) != 0 {
-		return nil, errRPC
-	}
-	if err = d.api.response(ctx, ResponseCheck{AttemptToken: permission.AttemptToken, Target: resolution.Target, Protocol: "a2a", Method: resolution.Method, Result: string(reply.Result)}); err != nil {
-		return nil, err
-	}
-	return reply.Result, nil
-}
-
 func (d *Dispatcher) callMCP(ctx context.Context, ticket string, resolution Resolution) (json.RawMessage, error) {
 	if resolution.Method != "tools/call" {
+		return nil, errBoundary
+	}
+	var checkedParams struct {
+		Name      string          `json:"name"`
+		Arguments json.RawMessage `json:"arguments"`
+	}
+	if resolution.ReviewedTool == nil || json.Unmarshal([]byte(resolution.Params), &checkedParams) != nil || checkedParams.Name != resolution.ReviewedTool.Name || ValidateReviewedSchema(resolution.ReviewedTool.InputSchema, checkedParams.Arguments) != nil {
 		return nil, errBoundary
 	}
 	// Some protocol notifications do not run ExtMCP request hooks. Supply the

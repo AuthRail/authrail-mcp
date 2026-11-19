@@ -62,6 +62,18 @@ func (h *Hooks) CheckRequest(ctx context.Context, request *wire.McpRequest) (*wi
 	if request.MetadataContext != nil {
 		check.SessionID = metadataText(request.MetadataContext, "sessionId")
 	}
+	outputSchema := ""
+	if request.Method == "tools/call" {
+		resolution, err := h.API.resolve(ctx, ticket)
+		var input struct {
+			Name      string          `json:"name"`
+			Arguments json.RawMessage `json:"arguments"`
+		}
+		if err != nil || resolution.Target != check.Target || resolution.Protocol != "mcp" || resolution.ReviewedTool == nil || json.Unmarshal(params, &input) != nil || input.Name != resolution.ReviewedTool.Name || ValidateReviewedSchema(resolution.ReviewedTool.InputSchema, input.Arguments) != nil {
+			return fail()
+		}
+		outputSchema = string(resolution.ReviewedTool.OutputSchema)
+	}
 	permission, err := h.API.request(ctx, check)
 	if err != nil || !permission.DeadlineAt.After(time.Now()) {
 		return fail()
@@ -77,7 +89,7 @@ func (h *Hooks) CheckRequest(ctx context.Context, request *wire.McpRequest) (*wi
 	}
 	propagated := http.Header{}
 	otel.GetTextMapPropagator().Inject(ctx, propagation.HeaderCarrier(propagated))
-	metadata, err := structpb.NewStruct(map[string]interface{}{"attemptToken": permission.AttemptToken, "traceparent": propagated.Get("traceparent"), "tracestate": propagated.Get("tracestate")})
+	metadata, err := structpb.NewStruct(map[string]interface{}{"outputSchema": outputSchema, "attemptToken": permission.AttemptToken, "traceparent": propagated.Get("traceparent"), "tracestate": propagated.Get("tracestate")})
 	if err != nil {
 		return fail()
 	}
@@ -102,7 +114,14 @@ func (h *Hooks) CheckResponse(ctx context.Context, response *wire.McpResponse) (
 	if !validTicket(attempt) {
 		return fail()
 	}
-	if err := h.API.response(ctx, ResponseCheck{AttemptToken: attempt, Target: response.ServiceNames[0],
+	var result struct {
+		StructuredContent json.RawMessage `json:"structuredContent"`
+		IsError           bool            `json:"isError"`
+	}
+	contractValid := json.Unmarshal(response.McpResponse, &result) == nil && !result.IsError && ValidateReviewedSchema(json.RawMessage(metadataText(response.MetadataContext, "outputSchema")), result.StructuredContent) == nil
+	retainCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if err := h.API.response(retainCtx, ResponseCheck{ReviewedContractValid: &contractValid, AttemptToken: attempt, Target: response.ServiceNames[0],
 		Protocol: "mcp", Method: response.Method, Result: string(response.McpResponse)}); err != nil {
 		return fail()
 	}

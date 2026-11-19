@@ -5,6 +5,9 @@
 Send authenticated MCP JSON-RPC requests over Streamable HTTP.
 `POST /`
 
+Receive authenticated Streamable HTTP requests using the same exact endpoint.
+`GET /`
+
 Read OAuth protected-resource metadata.
 `GET /.well-known/oauth-protected-resource`
 
@@ -66,6 +69,21 @@ Read one available tool's exact reviewed input/result contracts.
 These reads do not execute a provider operation or grant account access. A page
 can be empty with a continuation cursor when stale contracts are filtered.
 
+### Business requests — `business.execute`
+
+Save one exact reviewed route, binding digest and argument object under a stable UUID request key.
+`authrail_request_business_action`
+
+Read the original request status and only its permitted released result; this read does not dispatch work.
+`authrail_get_business_request`
+
+Continue the saved request at its current revision without replacement arguments.
+Stale unstarted review requires fresh facts and a new exact human approval.
+`authrail_resume_business_request`
+
+Request cancellation at the current revision. A dispatched effect cannot be undone by cancellation.
+`authrail_cancel_business_request`
+
 ### Accounts — `connections.read`
 
 List provider Connections and their saved health.
@@ -89,6 +107,12 @@ List saved native business accounts.
 Read an account's saved status and bounded tool-access summary.
 `authrail_get_business_account`
 
+List saved A2A agent connections and review status.
+`authrail_list_agent_connections`
+
+Read one agent connection's saved skill summary without credentials.
+`authrail_get_agent_connection`
+
 ### Account setup — `connections.manage`
 
 Open secure account setup, tool review, access replacement or disconnection.
@@ -104,6 +128,9 @@ Open a secure page for a person to connect, reconnect or disconnect an account.
 
 Open secure human setup, tool review, refresh or disconnection for a customer MCP server.
 `authrail_manage_custom_connection`
+
+Open secure human setup, skill review, refresh or disconnection for an A2A agent.
+`authrail_manage_agent_connection`
 
 The handoff does not change account access. Provider consent, credential entry and
 disconnect confirmation happen in the authenticated application.

@@ -59,6 +59,9 @@ func toolServer(backend *Backend, identity Identity) *mcp.Server {
 	if slices.Contains(identity.Scopes, BusinessToolsReadScope) {
 		addBusinessTools(server, backend)
 	}
+	if slices.Contains(identity.Scopes, BusinessExecuteScope) {
+		addBusinessExecutionTools(server, backend)
+	}
 	if slices.Contains(identity.Scopes, RuntimeReadScope) {
 		addRuntimeRecordTools(server, backend)
 	}
@@ -98,7 +101,7 @@ func Handler(backend *Backend) http.Handler {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"resource": backend.resource, "authorization_servers": []string{backend.issuer}, "scopes_supported": []string{Scope, GovernanceScope, ConnectionsScope, ConnectionsManageScope, BusinessToolsReadScope, RuntimeDraftsScope, RuntimeReadScope, RuntimeDeploymentsScope, RuntimeApprovalsScope}, "bearer_methods_supported": []string{"header"}, "resource_name": "AuthRail"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"resource": backend.resource, "authorization_servers": []string{backend.issuer}, "scopes_supported": []string{Scope, GovernanceScope, ConnectionsScope, ConnectionsManageScope, BusinessToolsReadScope, BusinessExecuteScope, RuntimeDraftsScope, RuntimeReadScope, RuntimeDeploymentsScope, RuntimeApprovalsScope}, "bearer_methods_supported": []string{"header"}, "resource_name": "AuthRail"})
 	})
 	mux.HandleFunc("/health/live", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {

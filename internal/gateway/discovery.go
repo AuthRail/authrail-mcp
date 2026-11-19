@@ -393,13 +393,19 @@ func (d *Dispatcher) checkReviewedTool(ctx context.Context, ticket string, resol
 	if authorization != nil {
 		input.Authorization = *authorization
 	}
-	client, transport, err := discoveryHTTPClient(ctx, input)
-	if err != nil {
-		return errBoundary
+	var snapshot *DiscoverySnapshot
+	var err error
+	if d.toolDiscovery != nil {
+		snapshot, err = d.toolDiscovery(ctx, input)
+	} else {
+		client, transport, clientErr := discoveryHTTPClient(ctx, input)
+		if clientErr != nil {
+			return errBoundary
+		}
+		defer transport.CloseIdleConnections()
+		snapshot, err = collectDiscovery(ctx, client, resolution.Endpoint)
 	}
-	defer transport.CloseIdleConnections()
-	snapshot, err := collectDiscovery(ctx, client, resolution.Endpoint)
-	if err != nil {
+	if err != nil || snapshot == nil {
 		return errBoundary
 	}
 	for _, tool := range snapshot.Tools {

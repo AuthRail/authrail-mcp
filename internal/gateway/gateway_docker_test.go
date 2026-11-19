@@ -59,7 +59,7 @@ func TestPinnedGatewayDispatch(t *testing.T) {
 		if r.URL.Path == "/a2a" {
 			effects.Add(1)
 			w.Header().Set("Content-Type", "application/json")
-			io.WriteString(w, `{"jsonrpc":"2.0","id":"authrail","result":{"id":"fixture-task"}}`)
+			io.WriteString(w, `{"jsonrpc":"2.0","id":"authrail","result":{"task":{"id":"fixture-task","contextId":"fixture-context","status":{"state":"TASK_STATE_WORKING"}}}}`)
 			return
 		}
 		mcpHandler.ServeHTTP(w, r)
@@ -79,7 +79,7 @@ func TestPinnedGatewayDispatch(t *testing.T) {
 	routes := []Route{{Target: "ar-11111111111111111111111111111111", Protocol: "mcp", Endpoint: "https://example.com:" + upstreamURL.Port() + "/mcp"},
 		{Target: "ar-22222222222222222222222222222222", Protocol: "a2a", Endpoint: "https://example.com:" + upstreamURL.Port() + "/a2a"}}
 	params := []string{`{"name":"create_issue","arguments":{"amount":9007199254740993}}`,
-		`{"message":{"messageId":"fixture","role":"user","parts":[{"kind":"text","text":"hello"}]}}`,
+		`{"message":{"messageId":"fixture","role":"ROLE_USER","parts":[{"data":{"text":"hello"},"mediaType":"application/json"}]},"configuration":{"acceptedOutputModes":["application/json"],"returnImmediately":true,"historyLength":0}}`,
 		`{"name":"stripe.refund_charge","arguments":{"amount":9007199254740993}}`}
 	var calls [3]atomic.Int32
 	var responses [3]atomic.Int32
@@ -121,13 +121,21 @@ func TestPinnedGatewayDispatch(t *testing.T) {
 		case "/internal/gateway/resolve":
 			method := "tools/call"
 			if index == 1 {
-				method = "message/send"
+				method = "SendMessage"
 			} else if index == 2 {
 				method = http.MethodPost
 			}
-			json.NewEncoder(w).Encode(Resolution{Route: routes[index], Method: method, Params: params[index], DeadlineAt: time.Now().Add(50 * time.Second)})
+			resolution := Resolution{Route: routes[index], Method: method, Params: params[index], DeadlineAt: time.Now().Add(50 * time.Second)}
+			if index == 0 {
+				resolution.ReviewedTool = &DiscoveryTool{Name: "create_issue", InputSchema: json.RawMessage(`{"type":"object"}`)}
+			}
+			if index == 1 {
+				resolution.A2A = &A2ABinding{Version: "1.0", MessageID: "fixture"}
+				resolution.ReviewedTool = &DiscoveryTool{Name: "reviewed_agent", InputSchema: json.RawMessage(`{"type":"object"}`), OutputSchema: json.RawMessage(`{"type":"object","required":["task"]}`)}
+			}
+			json.NewEncoder(w).Encode(resolution)
 		case "/internal/gateway/request":
-			if input.Method == "tools/call" || input.Method == "message/send" || input.Method == http.MethodPost {
+			if input.Method == "tools/call" || input.Method == "SendMessage" || input.Method == http.MethodPost {
 				if calls[index].Add(1) != 1 {
 					http.Error(w, "already dispatched", 409)
 					return
@@ -247,6 +255,9 @@ func TestPinnedGatewayDispatch(t *testing.T) {
 	dispatcher, err := NewDispatcher(api, configuration, origin, true)
 	if err != nil {
 		t.Fatal(err)
+	}
+	dispatcher.toolDiscovery = func(context.Context, DiscoveryInput) (*DiscoverySnapshot, error) {
+		return &DiscoverySnapshot{Tools: []DiscoveryTool{{Name: "create_issue", InputSchema: json.RawMessage(`{"type":"object"}`)}}}, nil
 	}
 	for index := range routes {
 		ticket := strings.Repeat("a", 40)

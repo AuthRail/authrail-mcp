@@ -5,10 +5,9 @@ API owns identity, permissions, business rules and durable records. The tenant
 client provides sign-in, consent and exact human review.
 
 [API.md](API.md) lists implemented endpoints and tools. The shared product story
-and plan describe the hosted MCP/A2A journey. The public listener serves
-management tools. A separate private adapter and pinned standalone gateway
-transport already-authorized work; the public listener does not yet expose
-connected business-tool execution.
+and plan describe the hosted MCP/A2A journey. The public listener exposes consented management, reviewed-tool discovery and
+saved business-request tools. A separate private adapter and pinned standalone
+gateway transport work after API-owned authorization.
 
 ```mermaid
 flowchart LR
@@ -44,7 +43,7 @@ client verifies the returned user and organisation before disclosing the result.
 The private service credential authenticates introspection and exchange; it
 supplies no customer permission by itself.
 
-The management transport is stateless. It does not retain workspace choices or
+The public transport is stateless. It does not retain workspace choices or
 business execution state between requests. The resource is the canonical root origin `https://mcp.authrail.io`, without a
 path or trailing slash. HTTP requests use `/` and metadata uses
 `/.well-known/oauth-protected-resource`. Old `/mcp` grants remain distinct and
@@ -101,8 +100,9 @@ review proposals. Preparing a proposal changes no deployment or vote. Its browse
 link binds the account, organisation, exact request and expected state. Only the
 authenticated person can confirm it. Confirmation rechecks live permissions and
 uses the owning domain transaction. Enforce confirmation includes the person's
-protected-boundary assertion. Approval grants permission; it does not execute or
-resume a business callback.
+protected-boundary assertion. Approval grants permission, not evidence of execution. A final hosted approval
+atomically queues its linked saved request; the worker rechecks current authority
+before continuation. A customer executor follows its own saved-request contract.
 
 Reads use bounded projections and exact-version audience checks. Verification
 history retains its Control or scoped Implementation owner. Missing, stale,
@@ -127,21 +127,38 @@ its own client session; session state never substitutes for API authority.
 
 ExtMCP request hooks recheck current authority and consume a one-use delivery
 record before the business call. Handshake credentials also cover protocol
-notifications that do not run request hooks. Response hooks retain a digest;
+notifications that do not run request hooks. Response hooks retain exact encrypted evidence, a digest and the reviewed result-contract verdict;
 the adapter reports transport and JSON-RPC failures separately because those do
 not always run response hooks. Missing outcomes become unknown on the original
 Action. Neither a response digest nor HTTP success authorizes result release.
 
-A2A uses a separate JSON-RPC route and the same private dispatch authority.
-Current transport supports bounded `message/send`; streaming, task delegation
-and interrupted-task continuation retain their own lifecycle. MCP hooks are not
-applied to A2A as if the protocols were interchangeable.
+A2A uses an explicitly reviewed A2A 1.0 recipient over JSON-RPC. The API wraps the
+reviewed JSON business arguments in one data part, supplies the original attempt
+as message ID and fixes the user role and nonblocking configuration. The adapter
+validates those business arguments against the reviewed input schema before
+permission consumption. Agent-supplied task IDs, destinations and credentials do
+not select the recipient.
+
+A returned task is retained with its original message, task and context references.
+PostgreSQL owns task state, deduplicated observations and cancellation requests.
+Bounded `GetTask` observations use a distinct delivery record and the original
+reference. `CancelTask` requires separate reviewed cancellation access; one saved
+cancellation delivery cannot become repeated sends. Input-required and auth-required
+states remain interrupted work. Cancellation is not evidence that effects were
+undone. A lost initial reply without a task reference remains unknown.
+
+The supported subset uses same-origin manual HTTP bearer access and JSON inputs.
+Files, streaming/push updates, tenant overrides, required extensions, text-only
+skills, OAuth acquisition and multi-turn input submission are unsupported. Legacy routes are preserved and
+require explicit 1.0 review for new hosted execution. A skill describes reviewed
+intent; it does not isolate the recipient's internals. MCP hooks do not substitute
+for A2A authorization.
 
 The pinned private MCP hop negotiates `2025-11-25` with the gateway's stateful
 listener. The management listener retains its own supported protocol versions.
 Generated ExtMCP wire bindings come from the same published gateway tag; the
 gateway implementation is not forked. Custom and native provider review publish private routes;
-public root naming and assistant business execution remain separate contracts.
+public discovery and business requests retain separate consent contracts.
 
 The hosted path reuses the sidecar's Go evaluation engine. The API coordinates
 that check and retains permission through one calling operation: resolve current
@@ -159,8 +176,20 @@ information release; execution outcomes are retained separately from permission.
 Business response deadlines are one minute. An overdue attempt triggers provider
 status reconciliation with its original identity, not a replacement write. Pending
 human work stays saved; fresh facts and short-lived permits govern later execution.
+Recovery schedules bounded original-reference checks fairly across tenants. Twelve
+automatic claims exhaust the background allowance; explicit continuation can request
+further checking. A failed task does not prove zero effects or allow another write.
 The current local connector below still has its existing journal/expiry behavior.
-These hosted contracts are intended work, not implemented management-listener tools.
+The public `business.execute` tools retain caller-owned intent and an outbox event
+in PostgreSQL. The outbox publishes a reference to the existing RabbitMQ jobs exchange;
+a bounded consumer claims a leased, fenced request before execution. The dispatcher
+never waits behind the business network call. A stable key reuses identical work; changed arguments or
+bindings conflict. Pending human requests remain saved while later continuation
+refreshes authority and facts. Exact human review includes the saved arguments and
+review digest; superseded reviews retain their votes without transferring approval. Request reads never dispatch. Raw provider responses
+stay encrypted until the reviewed result schema, result Rails and current caller
+access allow release. A schema mismatch retains task/effect evidence and withholds
+the result; it cannot erase an effect or authorize another write.
 
 ## Local protected execution
 
@@ -228,8 +257,8 @@ credentials and do not grant permission to execute business actions.
 For a saved native dispatch, the adapter forwards the original parameter string
 inside a bounded HTTP envelope, preserving exact JSON numbers. The API consumes
 provider start once and interprets the real provider reply. The adapter retains
-transport evidence and returns result_pending_check. Public assistant business
-dispatch and protected result release remain in their owning integration slices.
+transport evidence and returns result_pending_check. The public business-request flow consumes these records and applies result
+checks before release.
 
 ## Listener and resource configuration
 
@@ -247,8 +276,8 @@ reviewed operation contracts, active visible application revisions and current
 source fingerprints before returning safe names or exact contracts. It does not
 load credential ciphertext or contact a provider. Route IDs paginate bounded
 pages; stale routes can yield an empty page with a continuation cursor. Discovery
-is a current snapshot and never permission to execute. Hosted business dispatch
-and result release remain slice14.
+is a current snapshot and never permission to execute. Business dispatch and result release require separate `business.execute` consent
+and fresh Runtime authorization.
 
 Consent selections are bound to signed request, user, session and organisation.
 Changing that context clears optional choices and fences pending browser responses.

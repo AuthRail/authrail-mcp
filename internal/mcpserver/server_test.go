@@ -132,7 +132,7 @@ func TestConnectedToolsRecheckAuthorityAndIsolateIdentity(t *testing.T) {
 	}
 	defer session.Close()
 	tools, err := session.ListTools(ctx, nil)
-	if err != nil || len(tools.Tools) != 3 {
+	if err != nil || len(tools.Tools) != 6 {
 		t.Fatalf("tools: %v %v", tools, err)
 	}
 	for _, name := range []string{"authrail_get_connection", "authrail_get_workspace_summary"} {

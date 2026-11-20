@@ -296,3 +296,11 @@ and fresh Runtime authorization.
 Consent selections are bound to signed request, user, session and organisation.
 Changing that context clears optional choices and fences pending browser responses.
 Legacy resource connections remain listed and revocable with reconnect guidance.
+
+## Governance, account and human continuation
+
+Organisation, Inventory, Activity, Policies/library/authoring, account and own notifications have separately selected domain scopes. Read consent never publishes management tools. Guide reads use workspace.read. Each typed registration fixes its API route and method; tool arguments cannot choose endpoints, identity or credentials. The API uses the same domain service and current permissions as the browser. Organisation lists carry small summaries; exact person reads page team memberships and role detail supplies full permission grants. Policy/content chunks bind the actor, workspace, tool and exact content revision. Incoming management and outgoing API responses retain their existing64KiB transport bounds; larger private edits/files continue in the authenticated application.
+
+For an allowed mutation, PostgreSQL stores the stable command UUID and canonical input in the existing owning transaction after current permission/audience checks. The mutation, revision, audit and original outcome commit together. Concurrent duplicates return one original result; changed text under the same key conflicts. Policy commands retain original IDs/revisions/worker references instead of full documents, so retries cannot overwrite later edits or fill the ledger with content.
+
+Reserved decisions, credentials and file capabilities stay in real human screens. A signed navigation link binds the user, workspace, fixed same-site destination and short navigation expiry. Opening it checks the current browser identity and active membership. Exact review flows additionally bind the record revision, require acknowledgement and preserve existing final confirmation. Links apply no values or grants. Their expiry does not expire a pending human approval request. MCP-created Inventory items remain unconfirmed until the human confirms them. An Activity entry is reported evidence; its attestation proves integrity, not an external business effect or independent review.

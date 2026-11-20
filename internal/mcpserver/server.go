@@ -27,6 +27,42 @@ func toolServer(backend *Backend, identity Identity) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{Name: "authrail-mcp", Version: "0.1.0"}, nil)
 	annotations := &mcp.ToolAnnotations{ReadOnlyHint: true}
 	addIntegrationTools(server, backend)
+	addGuideTools(server, backend)
+	if slices.Contains(identity.Scopes, InventoryReadScope) {
+		addInventoryReadTools(server, backend)
+	}
+	if slices.Contains(identity.Scopes, InventoryManageScope) {
+		addInventoryManageTools(server, backend)
+	}
+	if slices.Contains(identity.Scopes, ActivityReadScope) {
+		addActivityReadTools(server, backend)
+	}
+	if slices.Contains(identity.Scopes, ActivityRecordScope) {
+		addActivityRecordTools(server, backend)
+	}
+	addPolicyTools(server, backend, identity.Scopes)
+	if slices.Contains(identity.Scopes, OrganisationReadScope) {
+		addOrganisationReadTools(server, backend)
+		addExportListTool(server, backend, true)
+	}
+	if slices.Contains(identity.Scopes, OrganisationManageScope) {
+		addOrganisationManageTools(server, backend)
+		addExportHandoffTool(server, backend, true)
+	}
+	if slices.Contains(identity.Scopes, AccountReadScope) {
+		addAccountReadTools(server, backend)
+		addExportListTool(server, backend, false)
+	}
+	if slices.Contains(identity.Scopes, AccountManageScope) {
+		addAccountManageTools(server, backend)
+		addExportHandoffTool(server, backend, false)
+	}
+	if slices.Contains(identity.Scopes, NotificationsReadScope) {
+		addNotificationReadTools(server, backend)
+	}
+	if slices.Contains(identity.Scopes, NotificationsManageScope) {
+		addNotificationManageTools(server, backend)
+	}
 	mcp.AddTool(server, &mcp.Tool{Name: "authrail_get_workspace_summary", Description: "Read the organisation and account authorised for this AuthRail connection.", Annotations: annotations},
 		func(ctx context.Context, _ *mcp.CallToolRequest, _ noArguments) (*mcp.CallToolResult, Workspace, error) {
 			token, identity := requestIdentity(ctx)
@@ -108,7 +144,7 @@ func Handler(backend *Backend) http.Handler {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"resource": backend.resource, "authorization_servers": []string{backend.issuer}, "scopes_supported": []string{Scope, SupportScope, GovernanceScope, ConnectionsScope, ConnectionsManageScope, BusinessToolsReadScope, BusinessExecuteScope, RuntimeDraftsScope, RuntimeReadScope, RuntimeDeploymentsScope, RuntimeApprovalsScope}, "bearer_methods_supported": []string{"header"}, "resource_name": "AuthRail"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"resource": backend.resource, "authorization_servers": []string{backend.issuer}, "scopes_supported": []string{Scope, InventoryReadScope, InventoryManageScope, ActivityReadScope, ActivityRecordScope, PoliciesReadScope, PoliciesManageScope, OrganisationReadScope, OrganisationManageScope, AccountReadScope, AccountManageScope, NotificationsReadScope, NotificationsManageScope, SupportScope, GovernanceScope, ConnectionsScope, ConnectionsManageScope, BusinessToolsReadScope, BusinessExecuteScope, RuntimeDraftsScope, RuntimeReadScope, RuntimeDeploymentsScope, RuntimeApprovalsScope}, "bearer_methods_supported": []string{"header"}, "resource_name": "AuthRail"})
 	})
 	mux.HandleFunc("/health/live", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {

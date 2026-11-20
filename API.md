@@ -73,6 +73,62 @@ Read the connected organisation and account.
 Read released SDK installation guidance.
 `authrail_get_sdk_integrations`
 
+### Workspace Guide — `workspace.read`
+
+Browse published workspace guidance, search it, and read section chunks bound to the current publication. Internal Admin guidance is excluded.
+`authrail_get_guide_navigation`
+`authrail_search_guide`
+`authrail_get_guide_article`
+
+### Your account — `account.read` / `account.manage`
+
+Read your current account/preferences, security-method metadata, own token-free session pages and own export statuses with read consent.
+`authrail_get_my_account`
+`authrail_get_my_account_security`
+`authrail_list_my_sessions`
+`authrail_list_my_exports`
+
+With manage consent, change your display name against its current value or explicit preferences against their current revision. Keep the command UUID unchanged when retrying. Account security, files, session revocation and lifecycle continue privately in AuthRail; handoffs apply no change and reveal no passwords, recovery codes or storage capabilities.
+`authrail_update_my_account_profile`
+`authrail_update_my_account_preferences`
+`authrail_manage_my_account`
+`authrail_manage_export`
+
+### Organisation — `organisation.read` / `organisation.manage`
+
+Read the selected workspace and your effective permissions. List/read roles, people and organisational structure under the same owner permissions as the application. Identity metadata requires identity-management permission. Organisation lists return at most20 summaries, and their cursors bind the actor, workspace, tool and filters. Exact role detail supplies grants; exact person detail pages active team memberships instead of returning all memberships in one response.
+`authrail_get_organisation`
+`authrail_list_organisation_permissions`
+`authrail_get_organisation_notification_preferences`
+`authrail_list_organisation_roles`
+`authrail_get_organisation_role`
+`authrail_list_organisation_people`
+`authrail_get_organisation_person`
+`authrail_list_organisation_invitations`
+`authrail_list_organisation_departments`
+`authrail_get_organisation_department`
+`authrail_list_organisation_teams`
+`authrail_get_organisation_team`
+`authrail_list_organisation_domains`
+`authrail_list_organisation_sso_connections`
+`authrail_list_organisation_exports`
+
+With manage consent, continue named role/people/structure/settings/lifecycle and export workflows in authenticated human screens. Selected references must belong to the connected workspace. Invitation acceptance uses the recipient's private email link. These navigation tools apply no values or grants; the browser rechecks current authority and confirmation.
+`authrail_manage_organisation`
+`authrail_manage_organisation_export`
+
+### Your notifications — `notifications.read` / `notifications.manage`
+
+Read only your account or connected-workspace inbox, separate unread counts and optional export-notification preferences. Internal Admin notifications are excluded.
+`authrail_list_my_notifications`
+`authrail_get_my_notification_counts`
+`authrail_get_my_export_notification_preferences`
+
+With manage consent, mark one addressed notification read or at most500 through an explicit creation-time cutoff. A stable command UUID retains the original changed-count; later arrivals remain unread. When reachedBatchLimit is true, read current counts before another batch with a new key. Preference changes require their exact current booleans; mandatory notification channels retain their rules.
+`authrail_mark_notification_read`
+`authrail_mark_notifications_read`
+`authrail_update_my_export_notification_preferences`
+
 ### Reviewed business tools — `business.tools.read`
 
 List currently reviewed tools available under the caller's account and application access.
@@ -405,3 +461,131 @@ Exchange a resource token for an exact named-tool API delegation.
 
 Delegated business endpoints belong to the AuthRail API. Their mounted paths and
 contracts are defined in [the MCP controllers](../authrail-server/src/auth/mcp).
+
+## Organisation Policies and Policy Library
+
+These named tools use `policies.read` for selected Policy content and metadata,
+plus current Policy read permission and exact saved version audience. Draft and
+authoring commands additionally require `policies.manage` and the owning domain
+permission. Management consent alone does not permit reading document contents.
+No Framework or Control activation is required for an organisation Policy.
+
+| Tools | Workflow |
+| --- | --- |
+| `authrail_list_policies`, `authrail_get_policy` | Search visible Policies and read lifecycle, owner, audience, freshness and exact draft/published references. |
+| `authrail_list_policy_versions`, `authrail_get_policy_history` | Follow bounded exact version and lifecycle history without substituting a current version. |
+| `authrail_get_policy_content` | Read one selected Policy/version as lossless JSON text chunks, each at most 24,000 UTF-8 bytes. Concatenate `text` by `offset` until `hasNextPage=false`, then parse JSON. Continuation binds the content digest, version, actor and workspace; changes require a new read. |
+| `authrail_list_policy_categories`, `authrail_list_policy_owner_candidates` | Find named category options and active same-workspace owners. Owner selection retains Policy management permission. |
+| `authrail_create_policy_draft`, `authrail_continue_policy_draft`, `authrail_save_policy_draft` | Create an unpublished Policy, start an empty/exact-version draft, or save the exact draft revision. Owner, audience and renewal cadence remain domain-validated. |
+| `authrail_list_policy_authoring_sessions`, `authrail_get_policy_authoring_session` | Find audience-visible saved sessions; read metadata and ten turn references per page. Select `part=proposal` or an exact `part=turn`/`turnId` for snapshot-bound JSON chunks. |
+| `authrail_start_policy_authoring`, `authrail_update_policy_authoring` | Prepare AuthRail-operated drafting using the explicitly selected business context and audience. Selected material reaches AuthRail and its configured model recipient; no customer model keys are requested. |
+| `authrail_answer_policy_authoring`, `authrail_retry_policy_authoring` | Answer current guided questions or retry one failed original turn. Both use the exact session revision and retain the resulting asynchronous turn reference. Follow status before another turn. |
+| `authrail_save_policy_authoring_proposal`, `authrail_cancel_policy_authoring`, `authrail_use_policy_authoring_draft` | Save a proposal, cancel a session, or use one exact ready proposal as an unpublished Policy draft. Active work and current context are rechecked. |
+| `authrail_list_policy_library_entries`, `authrail_get_policy_library_entry`, `authrail_list_policy_library_categories` | Search published reusable starting material and read its exact content hash and lossless content chunks. |
+| `authrail_adopt_policy_library_entry` | Adopt the reviewed exact Library content hash into one unpublished organisation Policy. Adoption neither publishes content nor creates a copy per Framework. |
+| `authrail_list_policy_library_submissions`, `authrail_get_policy_library_origin` | Follow organisation submission status within the exact current Policy audience and inspect original adoption provenance. |
+| `authrail_prepare_policy_handoff` | Open signed actor/workspace-bound human publication, independent review, draft discard, archive/restore, Library sharing/withdrawal, category management or private source handling. The link applies no change. Exact saved revision acknowledgement precedes the existing final human confirmation. |
+
+Commands retain a stable idempotency key, canonical input and outcome in the same
+PostgreSQL transaction as their domain mutation. Identical retries return the
+original references; changed input conflicts. Current authority is checked before
+replay. Pending AI work returns references and remains independently observable.
+Private source bytes, previews, presigned storage access and downloads stay in the
+authenticated browser flow. No tool accepts an arbitrary endpoint, method or SQL.
+Existing `authrail_get_policy_version` remains a separate governance metadata read;
+it does not disclose full document content or replace the explicit content consent.
+
+### AI Inventory — `inventory.read` and `inventory.manage`
+
+Read consent exposes visible systems, exact configuration and retained history.
+Management consent permits explicit record changes with a stable command UUID.
+Use the exact revision/current lifecycle returned by AuthRail. Identical retries
+retain the original saved revision; current authorized metadata may have advanced.
+MCP-created systems start unconfirmed. A person confirms the reviewed identity
+or adopts a revision on deployments in AuthRail; these tools do not activate Rails.
+
+Find visible systems and discovered, unconfirmed identities.
+`authrail_list_ai_inventory`
+
+Read current system identity and configuration overview.
+`authrail_get_ai_inventory_item`
+
+Read exact configuration by `overview`, `providers` or `audience` section.
+`authrail_get_ai_inventory_revision`
+
+Read retained revision summaries with an explicit continuation.
+`authrail_get_ai_inventory_history`
+
+Create an unconfirmed system record from reviewed business details.
+`authrail_create_ai_inventory_item`
+
+Save a new configuration against its exact expected revision.
+`authrail_update_ai_inventory_item`
+
+Change lifecycle against the exact revision and current lifecycle.
+`authrail_change_ai_inventory_lifecycle`
+
+Open revision-bound human confirmation, deployment-revision adoption or private integration discovery-key setup/revocation.
+`authrail_review_ai_inventory_item`
+
+### Activity Records — `activity.read` and `activity.record`
+
+Activity records describe reported work. Runtime permission, execution start,
+reported completion and proven external effects remain separate facts. Recording
+or correcting an Activity does not execute its action, approve a review or create
+accepted compliance Evidence. Attestations establish saved-record integrity only.
+
+List summaries within current Activity and Inventory audiences; full outcome
+text is available through the exact record read.
+`authrail_list_activity_records`
+
+Read current record overview and its exact revision reference.
+`authrail_get_activity_record`
+
+Read an exact retained record by `overview`, `audience` or `references` section.
+Policy/Evidence references keep their source permissions and audiences; inaccessible
+reference content is withheld. History and reviews use separate bounded tools.
+`authrail_get_activity_revision`
+
+Read retained correction revision references.
+`authrail_get_activity_history`
+
+Read human reviews for one exact visible revision.
+`authrail_get_activity_reviews`
+
+Find permitted categories.
+`authrail_list_activity_categories`
+
+Find permitted data classifications.
+`authrail_list_activity_classifications`
+
+Append a reported record against the exact Inventory revision, with a stable UUID.
+`authrail_create_activity_record`
+
+Append a correction against the exact current manual/imported revision. Runtime
+entries cannot be rewritten. Identical retries retain the original correction.
+`authrail_correct_activity_record`
+
+Open exact human review; the assistant cannot supply the human decision.
+`authrail_review_activity_record`
+
+Open private CSV/JSON upload in AuthRail. No file or storage capability is returned.
+`authrail_import_activity_records`
+
+Follow a retained import's status, counts and timestamps without file contents.
+`authrail_get_activity_import`
+
+Read exact revision attestation status and safe proof metadata.
+`authrail_get_activity_attestation`
+
+Verify the saved payload hash/signature. Missing or unfinished proof remains unknown.
+`authrail_verify_activity_attestation`
+
+Open private attestation download for an exact visible revision in AuthRail.
+`authrail_download_activity_attestation`
+
+Pagination cursors bind account, workspace, tool, owner and filters. Inventory
+providers/audience, Activity references/audience and long histories have explicit
+continuations. Secure handoffs are signed account/workspace navigation and apply
+no change. Human review rejects stale revisions; signed storage URLs, credentials,
+raw files and internal Admin authority never enter these tools.

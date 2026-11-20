@@ -95,13 +95,19 @@ draft. Action and source drafts need human review; Rail drafts need exact human
 publication. Contextual AI preparation runs through the API without exposing
 model credentials to Go or customer configuration.
 
-Policy drafting uses the same `runtime.drafts` consent for source selection,
-exact source reads, proposals, continuation and retained history. Current Rail and
-Policy permissions and the source audience apply. Source Policies do not require
-Framework/Control setup. Policy review links bind workspace, Rail, version and
-saved revision; they grant no publication permission. A signed-in human reviews
-the exact conditions, excerpts, facts and examples. The API's locked revision,
-test and source checks govern publication; later edits require fresh review.
+Policy, Data/source and Guard drafting use `runtime.drafts` consent for exact
+reads, bounded history, continuation and human-review handoff. Domain permissions
+and source audiences apply. Policy sources do not require Framework/Control setup.
+Review links bind workspace, Rail/source, version and revision; the browser checks
+that exact saved material, acknowledgement and confirmation before the API's
+transactional publication path. Tools cannot publish or grant the human's authority.
+
+Support tools require separate `support.reports` consent and named delegation.
+The API derives reporter, workspace and assistant-client identity, then uses the
+same SupportService as the UI. Only the reporter's submitted material/public status
+is returned; no internal triage notes or Admin authority cross this boundary.
+Unchanged submissions retain their UUID after uncertain responses. Staff email
+and inbox delivery follow the report's committed outbox event.
 
 Reserved deployment changes and approval decisions return signed, ten-minute
 review proposals. Preparing a proposal changes no deployment or vote. Its browser

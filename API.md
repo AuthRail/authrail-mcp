@@ -47,6 +47,21 @@ The API also checks current organisation permissions and access to each record.
 Tool input and result schemas are supplied by MCP discovery and the typed
 registrations in [internal/mcpserver](internal/mcpserver).
 
+### Report a problem — `support.reports`
+
+Submit deliberately reviewed text and an optional selected Action reference.
+A stable submission UUID deduplicates unchanged retries after uncertain responses.
+The authenticated reporter and assistant client are recorded by AuthRail.
+`authrail_submit_problem_report`
+
+List only that reporter's saved reports in the connected workspace.
+`authrail_list_my_problem_reports`
+
+Read your report status and public support reply. Internal triage notes and the
+Admin queue are unavailable to these tools. No diagnostics/files are attached
+automatically; selected Action references require current Runtime read permission.
+`authrail_get_my_problem_report`
+
 ### Workspace — `workspace.read`
 
 Inspect the assistant connection and its consented access.
@@ -170,6 +185,21 @@ Save a Guard Rail draft at its expected revision.
 Run saved examples for an exact Guard Rail draft revision.
 `authrail_test_guard_rail_draft`
 
+Find current Guard Rails and their draft/published versions.
+`authrail_list_guard_rails`
+
+Read one Guard Rail before choosing an exact version.
+`authrail_get_guard_rail`
+
+Read retained published and superseded Guard version history.
+`authrail_get_guard_rail_history`
+
+Start a Guard draft from a reviewed action; a concurrent existing draft returns a conflict to reconcile.
+`authrail_continue_guard_rail_draft`
+
+Open exact human review of a saved Guard revision, including boundaries, required processing, selected contextual material and examples.
+`authrail_review_guard_rail`
+
 Create a Policy Rail draft for an exact published Policy version.
 `authrail_create_policy_rail_draft`
 
@@ -234,6 +264,37 @@ Save a Data Rail draft at its expected revision.
 
 Run saved examples for an exact Data Rail draft revision.
 `authrail_test_data_rail_draft`
+
+Read retained reviewed information-source version history.
+`authrail_get_data_source_history`
+
+Start a source draft from an exact reviewed version; read and reconcile an existing draft after a conflict.
+`authrail_continue_data_source_draft`
+
+Open human review of an exact source draft revision: account, trusted record, projected value, freshness, timeout and unavailable behavior.
+`authrail_review_data_source`
+
+Find current Data Rails and their draft/published versions.
+`authrail_list_data_rails`
+
+Read one Data Rail before choosing an exact version.
+`authrail_get_data_rail`
+
+Read retained published and superseded Data version history.
+`authrail_get_data_rail_history`
+
+Start a Data draft from exact reviewed action and source versions; copy examples only when sources match.
+`authrail_continue_data_rail_draft`
+
+Open human review of an exact saved Data draft revision and its source and examples.
+`authrail_review_data_rail`
+
+Source review and Rail publication happen in the authenticated workspace with
+current human permissions. Handoffs bind the workspace, version and revision;
+changed content requires fresh review. These tools do not execute a lookup,
+connect credentials or activate a deployment. Contextual assessments disclose
+only reviewed material to AuthRail and its configured model recipient after
+required local filtering. Missing or uncertain findings cannot clear a check.
 
 ### Deployments — `runtime.deployments`
 

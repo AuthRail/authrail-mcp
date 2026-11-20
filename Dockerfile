@@ -7,8 +7,8 @@ RUN CGO_ENABLED=0 go build -trimpath -o /out/authrail-mcp ./cmd/authrail-mcp && 
     CGO_ENABLED=0 go build -trimpath -o /out/authrail-gateway-adapter ./cmd/authrail-gateway-adapter
 
 FROM alpine:3.23 AS mcp
-ARG REVISION=548ce9b-slice20-dirty
-LABEL org.opencontainers.image.version="development-slice20" org.opencontainers.image.revision=$REVISION
+ARG REVISION=9b7d55b-slices21-23-dirty
+LABEL org.opencontainers.image.version="development-slice23" org.opencontainers.image.revision=$REVISION
 RUN apk add --no-cache ca-certificates
 COPY --from=build /out/authrail-mcp /usr/local/bin/authrail-mcp
 USER 65532:65532

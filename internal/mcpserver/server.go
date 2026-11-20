@@ -42,6 +42,9 @@ func toolServer(backend *Backend, identity Identity) *mcp.Server {
 			}
 			return nil, connection{MCPURL: workspace.MCPURL, ClientID: identity.ClientID, Organisation: workspace.Organisation, User: workspace.User, Scopes: identity.Scopes}, nil
 		})
+	if slices.Contains(identity.Scopes, SupportScope) {
+		addSupportTools(server, backend)
+	}
 	if slices.Contains(identity.Scopes, GovernanceScope) {
 		addFrameworkTools(server, backend)
 		addControlTools(server, backend)
@@ -69,6 +72,8 @@ func toolServer(backend *Backend, identity Identity) *mcp.Server {
 	if slices.Contains(identity.Scopes, RuntimeDraftsScope) {
 		addRuntimeDraftTools(server, backend)
 		addPolicyRailTools(server, backend)
+		addDataRailTools(server, backend)
+		addGuardRailTools(server, backend)
 	}
 	if slices.Contains(identity.Scopes, RuntimeDeploymentsScope) {
 		addRuntimeDeploymentTools(server, backend)
@@ -103,7 +108,7 @@ func Handler(backend *Backend) http.Handler {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"resource": backend.resource, "authorization_servers": []string{backend.issuer}, "scopes_supported": []string{Scope, GovernanceScope, ConnectionsScope, ConnectionsManageScope, BusinessToolsReadScope, BusinessExecuteScope, RuntimeDraftsScope, RuntimeReadScope, RuntimeDeploymentsScope, RuntimeApprovalsScope}, "bearer_methods_supported": []string{"header"}, "resource_name": "AuthRail"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"resource": backend.resource, "authorization_servers": []string{backend.issuer}, "scopes_supported": []string{Scope, SupportScope, GovernanceScope, ConnectionsScope, ConnectionsManageScope, BusinessToolsReadScope, BusinessExecuteScope, RuntimeDraftsScope, RuntimeReadScope, RuntimeDeploymentsScope, RuntimeApprovalsScope}, "bearer_methods_supported": []string{"header"}, "resource_name": "AuthRail"})
 	})
 	mux.HandleFunc("/health/live", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {

@@ -139,6 +139,37 @@ func TestDataDraftToolsUseBoundedNamedRoutes(t *testing.T) {
 		{"authrail_review_policy_rail", http.MethodPost, "/organisation/mcp/policy-rails/" + railID + "/versions/" + versionID + "/review", map[string]any{"railId": railID, "versionId": versionID, "revision": 7}},
 	}
 	cases = append(cases, policyCases...)
+	cases = append(cases, []struct {
+		name, method, path string
+		args               map[string]any
+	}{
+		{"authrail_list_guard_rails", http.MethodGet, "/organisation/mcp/guard-rails?afterId=" + railID + "&limit=10", map[string]any{"afterId": railID, "limit": 10}},
+		{"authrail_get_guard_rail", http.MethodGet, "/organisation/mcp/guard-rails/" + railID, map[string]any{"railId": railID}},
+		{"authrail_get_guard_rail_history", http.MethodGet, "/organisation/mcp/guard-rails/" + railID + "/history?beforeVersionNumber=7&limit=10", map[string]any{"railId": railID, "beforeVersionNumber": 7, "limit": 10}},
+		{"authrail_continue_guard_rail_draft", http.MethodPost, "/organisation/mcp/guard-rails/" + railID + "/drafts", map[string]any{"railId": railID, "operationVersionId": operationID, "basedOnVersionId": sourceID}},
+		{"authrail_review_guard_rail", http.MethodPost, "/organisation/mcp/guard-rails/" + railID + "/versions/" + versionID + "/review", map[string]any{"railId": railID, "versionId": versionID, "revision": 7}},
+	}...)
+
+	cases = append(cases, []struct {
+		name, method, path string
+		args               map[string]any
+	}{
+		{"authrail_list_data_rails", http.MethodGet, "/organisation/mcp/data-rails?afterId=" + railID + "&limit=10", map[string]any{"afterId": railID, "limit": 10}},
+		{"authrail_get_data_rail", http.MethodGet, "/organisation/mcp/data-rails/" + railID, map[string]any{"railId": railID}},
+		{"authrail_get_data_rail_history", http.MethodGet, "/organisation/mcp/data-rails/" + railID + "/history?beforeVersionNumber=7&limit=10", map[string]any{"railId": railID, "beforeVersionNumber": 7, "limit": 10}},
+		{"authrail_continue_data_rail_draft", http.MethodPost, "/organisation/mcp/data-rails/" + railID + "/drafts", map[string]any{"railId": railID, "operationVersionId": operationID, "basedOnVersionId": sourceID, "sourceContextVersionId": versionID}},
+		{"authrail_review_data_rail", http.MethodPost, "/organisation/mcp/data-rails/" + railID + "/versions/" + versionID + "/review", map[string]any{"railId": railID, "versionId": versionID, "revision": 7}},
+	}...)
+
+	cases = append(cases, []struct {
+		name, method, path string
+		args               map[string]any
+	}{
+		{"authrail_get_data_source_history", http.MethodGet, "/organisation/mcp/data-rails/sources/" + sourceID + "/history?beforeVersionNumber=7&limit=10", map[string]any{"sourceId": sourceID, "beforeVersionNumber": 7, "limit": 10}},
+		{"authrail_continue_data_source_draft", http.MethodPost, "/organisation/mcp/data-rails/sources/" + sourceID + "/drafts", map[string]any{"sourceId": sourceID, "basedOnVersionId": versionID}},
+		{"authrail_review_data_source", http.MethodPost, "/organisation/mcp/data-rails/sources/" + sourceID + "/versions/" + versionID + "/review", map[string]any{"sourceId": sourceID, "versionId": versionID, "revision": 7}},
+	}...)
+
 	for _, scope := range []bool{true, false} {
 		t.Run(map[bool]string{true: "consented", false: "no-consent"}[scope], func(t *testing.T) {
 			var calls atomic.Int32
@@ -175,7 +206,7 @@ func TestDataDraftToolsUseBoundedNamedRoutes(t *testing.T) {
 					if r.Method != item.method || r.URL.RequestURI() != item.path || r.Header.Get("X-Organisation-Id") != "org-1" {
 						t.Errorf("wrong Data route %s %s", r.Method, r.URL.RequestURI())
 					}
-					if r.Method == http.MethodPatch || tool == "authrail_test_data_rail_draft" || tool == "authrail_review_policy_rail" {
+					if r.Method == http.MethodPatch || tool == "authrail_test_data_rail_draft" || strings.HasPrefix(tool, "authrail_review_") {
 						var body map[string]any
 						_ = json.NewDecoder(r.Body).Decode(&body)
 						if body["revision"] != float64(7) || body["sourceId"] != nil || body["railId"] != nil || body["versionId"] != nil || body["operationId"] != nil {
@@ -244,9 +275,11 @@ func TestDataDraftToolsUseBoundedNamedRoutes(t *testing.T) {
 					}
 				}
 				for _, invalid := range []map[string]any{{"railId": railID, "versionId": versionID, "revision": 0}, {"railId": railID, "versionId": versionID, "revision": 7, "publish": true}, {"railId": railID, "versionId": versionID, "revision": 7, "organisationId": "org-2"}} {
-					result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "authrail_review_policy_rail", Arguments: invalid})
-					if err == nil && !result.IsError {
-						t.Fatal("review handoff accepted invalid revision, publication or agent-selected tenant")
+					for _, tool := range []string{"authrail_review_policy_rail", "authrail_review_guard_rail", "authrail_review_data_rail"} {
+						result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: tool, Arguments: invalid})
+						if err == nil && !result.IsError {
+							t.Fatal("review handoff accepted invalid revision, publication or agent-selected tenant")
+						}
 					}
 				}
 				if calls.Load() != expected {

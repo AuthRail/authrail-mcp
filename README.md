@@ -181,6 +181,7 @@ Choose only the consent needed for your work:
 | Access | What the assistant can do |
 | --- | --- |
 | `workspace.read` | Read your connected workspace and available capabilities. Required for all tools. |
+| `support.reports` | Submit deliberately reviewed problems and follow your own reports and public support replies. |
 | `business.tools.read` | Discover currently reviewed business tools and their exact contracts. |
 | `business.execute` | Request, inspect and continue original business work, or request cancellation. |
 | `connections.read` | Read saved account and connection summaries. |

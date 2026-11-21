@@ -161,7 +161,7 @@ func (b *Backend) call(ctx context.Context, method, path, bearer, org string, in
 	return nil
 }
 
-// Ready checks API availability without borrowing a customer's identity.
+// Ready checks dependency health and exact resource/issuer agreement without a customer identity.
 func (b *Backend) Ready(ctx context.Context) bool {
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
@@ -174,7 +174,19 @@ func (b *Backend) Ready(ctx context.Context) bool {
 		return false
 	}
 	defer response.Body.Close()
-	return response.StatusCode == http.StatusOK
+	if response.StatusCode != http.StatusOK {
+		return false
+	}
+	var configuration struct {
+		Resource            string `json:"resource"`
+		AuthorizationServer string `json:"authorizationServer"`
+	}
+	// A healthy API with different OAuth addresses cannot authorize this listener.
+	// Keep the service credential on the fixed private API; never follow a redirect.
+	if err := b.call(ctx, http.MethodGet, "/auth/mcp/configuration", b.serviceToken, "", nil, &configuration); err != nil {
+		return false
+	}
+	return configuration.Resource == b.resource && configuration.AuthorizationServer == b.issuer
 }
 
 // Introspect asks AuthRail to validate the token for each request.

@@ -213,3 +213,62 @@ func TestBackendRejectsRedirectsAndOversizedResponses(t *testing.T) {
 		t.Fatal("credential-bearing redirect followed")
 	}
 }
+
+// Dependency health alone is insufficient: tokens for another issuer/resource
+// cannot authorize this listener. Configuration stays on the authenticated API.
+func TestReadinessRequiresExactAuthenticatedOAuthConfiguration(t *testing.T) {
+	for _, scenario := range []string{"aligned", "other-resource", "other-issuer", "missing", "unhealthy", "redirect"} {
+		t.Run(scenario, func(t *testing.T) {
+			var leaked atomic.Bool
+			sink := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { leaked.Store(true) }))
+			defer sink.Close()
+			api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.URL.Path {
+				case "/health/ready":
+					if r.Header.Get("Authorization") != "" {
+						t.Error("health probe received service credential")
+					}
+					if scenario == "unhealthy" {
+						w.WriteHeader(http.StatusServiceUnavailable)
+						return
+					}
+					w.WriteHeader(http.StatusOK)
+				case "/auth/mcp/configuration":
+					if r.Header.Get("Authorization") != "Bearer "+strings.Repeat("s", 32) {
+						t.Error("configuration request missing private service credential")
+					}
+					if scenario == "redirect" {
+						http.Redirect(w, r, sink.URL, http.StatusTemporaryRedirect)
+						return
+					}
+					resource, issuer := "https://mcp.example.test", "https://api.example.test/auth"
+					if scenario == "other-resource" {
+						resource = "https://another.example.test"
+					}
+					if scenario == "other-issuer" {
+						issuer = "https://another.example.test/auth"
+					}
+					if scenario == "missing" {
+						w.WriteHeader(http.StatusNotFound)
+						return
+					}
+					_ = json.NewEncoder(w).Encode(map[string]string{"resource": resource, "authorizationServer": issuer})
+				default:
+					t.Errorf("unexpected readiness path: %s", r.URL.Path)
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			defer api.Close()
+			backend, err := NewBackend(Config{APIURL: api.URL, ResourceURL: "https://mcp.example.test", AuthorizationServerURL: "https://api.example.test/auth", ServiceToken: strings.Repeat("s", 32), AllowLoopback: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if ready := backend.Ready(context.Background()); ready != (scenario == "aligned") {
+				t.Fatalf("readiness=%v for %s", ready, scenario)
+			}
+			if leaked.Load() {
+				t.Fatal("private service credential followed redirect")
+			}
+		})
+	}
+}

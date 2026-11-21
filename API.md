@@ -80,6 +80,88 @@ Browse published workspace guidance, search it, and read section chunks bound to
 `authrail_search_guide`
 `authrail_get_guide_article`
 
+### Compliance configuration — `compliance.configuration.read` / `compliance.configuration.manage`
+
+Read the published Framework catalogue, custom Framework versions, exact scope,
+permitted Control drafts and scoped Implementations, coverage decisions/reviews
+and custom import status. Content continuation retains the selected version. Scope pagination uses `cursor`; lossless content chunks use the separate `contentCursor`. Continue all content chunks for one scope page before requesting its next page.
+`authrail_list_compliance_frameworks`
+`authrail_list_custom_frameworks`
+`authrail_list_custom_framework_versions`
+`authrail_get_custom_framework_version`
+`authrail_get_framework_scope`
+`authrail_list_controls`
+`authrail_get_control_draft`
+`authrail_list_control_implementations`
+`authrail_list_coverage_decisions`
+`authrail_list_coverage_reviews`
+`authrail_list_custom_framework_imports`
+`authrail_get_custom_framework_import`
+`authrail_get_control_authoring`
+
+With preparation consent, create or save permitted drafts and request Control
+authoring or retry a failed job against its exact saved update time. Reuse the command UUID for unchanged retries; saving requires the exact
+current draft revision. Control authoring and its generated text also require `policies.read` consent and current source Policy access. Scope answer preparation preserves the separate human acceptance decision. Preparation never approves a Control or publishes a Framework.
+`authrail_create_control_draft`
+`authrail_create_control_implementation_draft`
+`authrail_save_control_implementation_draft`
+`authrail_save_framework_scope_answers`
+`authrail_save_control_draft`
+`authrail_create_custom_framework_draft`
+`authrail_create_custom_framework_version`
+`authrail_save_custom_framework_version`
+`authrail_start_control_authoring`
+`authrail_retry_control_authoring`
+
+Continue exact Framework scope, applicability, publication, import, Control and
+mapping review workflows in authenticated AuthRail screens. Signed navigation
+links apply no change. Current permission, audience and decision checks still run
+in the destination screen. Private upload capabilities stay there.
+`authrail_prepare_framework_handoff`
+`authrail_prepare_control_handoff`
+
+### Compliance verification — `compliance.verification.read` / `compliance.verification.manage`
+
+Read permitted operational findings, remediation tasks, exact blocker Exceptions,
+Framework reports and Evidence package status. Existing exact Control/Test/Evidence
+history and Framework readiness tools retain their separate `governance.read` consent.
+Private file contents and download capabilities are excluded from these tools.
+`authrail_get_test_definition`
+`authrail_get_evidence_requirement`
+`authrail_list_operational_findings`
+`authrail_get_operational_finding`
+`authrail_list_remediation_tasks`
+`authrail_get_remediation_task`
+`authrail_list_readiness_exceptions`
+`authrail_get_readiness_exception`
+`authrail_list_framework_reports`
+`authrail_get_framework_report`
+`authrail_list_evidence_packages`
+`authrail_get_evidence_package`
+
+With preparation consent, save or remove Test definitions and Evidence Requirements
+against the exact owner draft revision, or create/update remediation tasks under
+the existing Finding audience. Commands retain their original outcome; a Task
+never closes its Finding or changes proof health.
+`authrail_create_remediation_task`
+`authrail_update_remediation_task`
+`authrail_save_test_definition`
+`authrail_remove_test_definition`
+`authrail_save_evidence_requirement`
+`authrail_remove_evidence_requirement`
+
+Continue proof recording/submission, independent review, Finding handling,
+Exception decisions, reports and secure upload/download/export in the authenticated
+app. These tools return navigation only: no passing Test, accepted Evidence,
+approved Exception or delivered file is implied.
+`authrail_record_test_run`
+`authrail_submit_evidence_record`
+`authrail_review_evidence_record`
+`authrail_manage_evidence_package`
+`authrail_manage_operational_finding`
+`authrail_manage_readiness_exception`
+`authrail_manage_framework_report`
+
 ### Your account — `account.read` / `account.manage`
 
 Read your current account/preferences, security-method metadata, own token-free session pages and own export statuses with read consent.

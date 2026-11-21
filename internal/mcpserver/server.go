@@ -41,6 +41,8 @@ func toolServer(backend *Backend, identity Identity) *mcp.Server {
 		addActivityRecordTools(server, backend)
 	}
 	addPolicyTools(server, backend, identity.Scopes)
+	addComplianceConfigurationTools(server, backend, identity.Scopes)
+	addComplianceVerificationTools(server, backend, identity.Scopes)
 	if slices.Contains(identity.Scopes, OrganisationReadScope) {
 		addOrganisationReadTools(server, backend)
 		addExportListTool(server, backend, true)
@@ -144,7 +146,7 @@ func Handler(backend *Backend) http.Handler {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"resource": backend.resource, "authorization_servers": []string{backend.issuer}, "scopes_supported": []string{Scope, InventoryReadScope, InventoryManageScope, ActivityReadScope, ActivityRecordScope, PoliciesReadScope, PoliciesManageScope, OrganisationReadScope, OrganisationManageScope, AccountReadScope, AccountManageScope, NotificationsReadScope, NotificationsManageScope, SupportScope, GovernanceScope, ConnectionsScope, ConnectionsManageScope, BusinessToolsReadScope, BusinessExecuteScope, RuntimeDraftsScope, RuntimeReadScope, RuntimeDeploymentsScope, RuntimeApprovalsScope}, "bearer_methods_supported": []string{"header"}, "resource_name": "AuthRail"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"resource": backend.resource, "authorization_servers": []string{backend.issuer}, "scopes_supported": []string{Scope, ComplianceConfigurationReadScope, ComplianceConfigurationManageScope, ComplianceVerificationReadScope, ComplianceVerificationManageScope, InventoryReadScope, InventoryManageScope, ActivityReadScope, ActivityRecordScope, PoliciesReadScope, PoliciesManageScope, OrganisationReadScope, OrganisationManageScope, AccountReadScope, AccountManageScope, NotificationsReadScope, NotificationsManageScope, SupportScope, GovernanceScope, ConnectionsScope, ConnectionsManageScope, BusinessToolsReadScope, BusinessExecuteScope, RuntimeDraftsScope, RuntimeReadScope, RuntimeDeploymentsScope, RuntimeApprovalsScope}, "bearer_methods_supported": []string{"header"}, "resource_name": "AuthRail"})
 	})
 	mux.HandleFunc("/health/live", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {

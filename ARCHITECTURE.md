@@ -43,6 +43,19 @@ client verifies the returned user and organisation before disclosing the result.
 The private service credential authenticates introspection and exchange; it
 supplies no customer permission by itself.
 
+Compliance configuration and verification each have separate read and preparation
+consent. Typed tools call the existing Framework, Control, Test, Evidence, Finding
+and readiness owners. Exact accepted scope and version references keep their
+existing meaning. PostgreSQL retains draft commands with the owning mutation and
+audit; current permission and object audience are checked before replay. A retry
+returns the original saved references, while a fresh read shows later work.
+
+Reserved human proof decisions, publication, scope acceptance and private file
+transfer use actor/workspace-bound signed navigation to authenticated screens.
+Opening a link applies nothing. The owning screen rechecks current authority and
+shows the material the person is deciding on. Storage capabilities and retained
+private files never pass through the public tool result.
+
 The public transport is stateless. It does not retain workspace choices or
 business execution state between requests. The resource is the canonical root origin `https://mcp.authrail.io`, without a
 path or trailing slash. HTTP requests use `/` and metadata uses

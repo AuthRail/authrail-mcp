@@ -101,6 +101,8 @@ func TestWorkspaceAccountRequiresOwnConsentedIdentity(t *testing.T) {
 // Discovery must distinguish each optional domain scope, including read-only consent.
 func TestWorkspaceDiscoveryKeepsDomainConsentSeparate(t *testing.T) {
 	groups := []struct{ scope, tool string }{
+		{ComplianceConfigurationReadScope, "authrail_list_compliance_frameworks"}, {ComplianceConfigurationManageScope, "authrail_create_control_draft"},
+		{ComplianceVerificationReadScope, "authrail_list_operational_findings"}, {ComplianceVerificationManageScope, "authrail_create_remediation_task"},
 		{OrganisationReadScope, "authrail_get_organisation"}, {OrganisationManageScope, "authrail_manage_organisation"},
 		{InventoryReadScope, "authrail_list_ai_inventory"}, {InventoryManageScope, "authrail_create_ai_inventory_item"},
 		{ActivityReadScope, "authrail_list_activity_records"}, {ActivityRecordScope, "authrail_create_activity_record"},

@@ -18,8 +18,17 @@ import (
 	"golang.org/x/sys/unix"
 )
 
+// Versioned local checkpoints describe execution boundaries, not provider proof.
+const recoveryCheckpointVersion = 1
+const phaseBeforeSDKStart = "before_sdk_start"
+const phaseSDKStartPossible = "sdk_start_possible"
+const phaseDispatchPossible = "dispatch_possible"
+
 // Records are private recovery state, not proof that a provider effect occurred.
 type record struct {
+	CheckpointVersion int    `json:"checkpointVersion,omitempty"`
+	ExecutionPhase    string `json:"executionPhase,omitempty"`
+
 	Arguments          string                         `json:"arguments,omitempty"`
 	OperationVersionID string                         `json:"operationVersionId,omitempty"`
 	PrincipalID        string                         `json:"principalId,omitempty"`

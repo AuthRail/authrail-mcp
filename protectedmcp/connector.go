@@ -122,11 +122,11 @@ func New(ctx context.Context, config Config) (*Connector, error) {
 	if err != nil {
 		return nil, err
 	}
+	if _, ok := any(client).(executionCheckpointer); !ok {
+		return nil, errors.New("protected MCP requires an AuthRail Go SDK with execution checkpoint support")
+	}
 	var state requestStore
 	if config.SharedState != nil {
-		if _, ok := any(client).(executionCheckpointer); !ok {
-			return nil, errors.New("shared recovery requires an AuthRail Go SDK with execution checkpoint support")
-		}
 		state, err = openSharedStore(config.Runtime, *config.SharedState)
 	} else {
 		state, err = openStore(config.StateDirectory, config.JournalKey)
@@ -418,6 +418,10 @@ func (c *Connector) invoke(ctx context.Context, name string, input invocation) (
 	saved = &record{Binding: bound.pin, Intent: intent, State: "checking", ResourceID: resource, ResourceReference: reference,
 		Arguments: string(encoded), OperationVersionID: bound.binding.OperationVersionID,
 		PrincipalID: c.config.PrincipalID, SessionID: c.config.SessionID}
+	if _, local := c.state.(*store); local {
+		saved.CheckpointVersion = recoveryCheckpointVersion
+		saved.ExecutionPhase = phaseBeforeSDKStart
+	}
 	if err = c.state.save(key, saved); err != nil {
 		return reply{}, err
 	}
@@ -472,16 +476,14 @@ func reviewSummary(binding Binding, args map[string]any) *authrail.ReviewSummary
 }
 
 func (c *Connector) executionClient(key string, saved *record) *authrail.Client {
-	checkpoint, ok := any(c.runtime).(executionCheckpointer)
-	if !ok {
-		// Older released SDKs retain the established local journal path only.
-		return c.runtime
-	}
-	return checkpoint.WithExecutionCheckpoint(func(ctx context.Context, recovery authrail.Recovery) error {
+	return c.runtime.WithExecutionCheckpoint(func(ctx context.Context, recovery authrail.Recovery) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		saved.State = "checking"
+		if saved.CheckpointVersion == recoveryCheckpointVersion {
+			saved.ExecutionPhase = phaseSDKStartPossible
+		}
 		saved.ActionID = recovery.ActionID
 		saved.Recovery = &recovery
 		return c.state.save(key, saved)
@@ -519,6 +521,9 @@ func (c *Connector) executor(bound tool, key string, saved *record) func(context
 		}
 		// Persist one fenced dispatch marker only after the final resource/schema checks.
 		saved.State = "started"
+		if saved.CheckpointVersion == recoveryCheckpointVersion {
+			saved.ExecutionPhase = phaseDispatchPossible
+		}
 		saved.ActionID = execution.ActionID
 		recovery := authrail.Recovery(execution)
 		saved.Recovery = &recovery

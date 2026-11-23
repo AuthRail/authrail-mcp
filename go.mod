@@ -3,7 +3,7 @@ module github.com/AuthRail/authrail-mcp
 go 1.26.5
 
 require (
-	github.com/AuthRail/authrail-sdk-go v0.0.0-20261106054729-dfd7802cc805
+	github.com/AuthRail/authrail-sdk-go v0.0.0-20261123005737-3c0299a798c7
 	github.com/google/jsonschema-go v0.4.3
 	github.com/knadh/koanf/providers/confmap v1.0.1
 	github.com/knadh/koanf/providers/env/v2 v2.0.2

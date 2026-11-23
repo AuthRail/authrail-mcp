@@ -290,8 +290,13 @@ checkpoint whose start acknowledgement was lost. Trusted application code uses
 `Connector.Reconcile` to check the original provider identity and retain its outcome;
 the worker does not call providers or repeat writes. Pre-evaluation work without a
 start remains available for inspection without automatic reevaluation. The shared
-store requires checkpoint-capable Go SDK source; the currently pinned released SDK
-continues to support the default local journal. No CLI shared-store flag or hosted
+store and default local journal require the pinned checkpoint-capable Go SDK
+source. New local records persist a versioned pre-start phase, advance before the
+SDK start request, and advance again before downstream dispatch. Offline operator
+inspection uses the same exclusive journal lock. Only proven pre-start interruptions
+can be closed locally; legacy or possibly dispatched records remain unknown and
+are never replayed. The operator command returns safe identity diagnostics without
+arguments or results and does not accept provider-outcome assertions. No CLI shared-store flag or hosted
 gateway dispatch is claimed. Gateway protocol sessions retain a separate routing
 and recovery contract.
 

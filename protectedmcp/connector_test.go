@@ -203,9 +203,6 @@ func TestProtectedToolDecisionAndReplay(t *testing.T) {
 	}
 }
 func TestLostStartRetainsRecoveryWithoutDispatch(t *testing.T) {
-	if _, supported := any(&authrail.Client{}).(executionCheckpointer); !supported {
-		t.Skip("requires the source SDK with durable execution checkpoint support")
-	}
 	config, downstream, sidecar := fixture(t)
 	sidecar.lostStart = true
 	connector, err := New(context.Background(), config)
@@ -221,6 +218,9 @@ func TestLostStartRetainsRecoveryWithoutDispatch(t *testing.T) {
 	if err != nil || saved == nil || saved.Recovery == nil || saved.Recovery.ActionID != actionID ||
 		!uuid.MatchString(saved.Recovery.AttemptID) || !digest.MatchString(saved.Recovery.InputSHA256) || saved.Arguments == "" {
 		t.Fatalf("lost start identity is unavailable: %v", err)
+	}
+	if saved.CheckpointVersion != recoveryCheckpointVersion || saved.ExecutionPhase != phaseSDKStartPossible {
+		t.Fatal("lost start did not retain pre-dispatch checkpoint")
 	}
 	if err = connector.Close(); err != nil {
 		t.Fatal(err)

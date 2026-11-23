@@ -34,6 +34,8 @@ func run() error {
 	outputPath := flags.String("output", "", "new private configuration path for --bind; never overwrites a file")
 	idempotencyField := flags.String("idempotency-field", "", "connector-owned argument to exclude from inspected Operation inputs")
 	toolName := flags.String("tool", "", "inspect only this exact downstream tool name")
+	recoverRequest := flags.String("recover-request", "", "inspect one exact saved request offline; requires --tool and the serving connector to be stopped")
+	closeInterrupted := flags.Bool("close-interrupted", false, "close only a durable checkpoint proving no SDK start; never retries or resolves uncertain effects")
 	inspect := flags.Bool("inspect", false, "list downstream tool contracts for review; never execute a tool")
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -41,12 +43,19 @@ func run() error {
 		}
 		return errors.New("invalid command options")
 	}
-	if *configPath == "" || flags.NArg() != 0 || *bind && (*inspect || *outputPath == "") || !*bind && *outputPath != "" || !*inspect && (*idempotencyField != "" || *toolName != "") {
+	if *configPath == "" || flags.NArg() != 0 || *bind && (*inspect || *outputPath == "") || !*bind && *outputPath != "" || !*inspect && *idempotencyField != "" || !*inspect && *recoverRequest == "" && *toolName != "" || *recoverRequest != "" && (*bind || *inspect || *toolName == "") || *closeInterrupted && *recoverRequest == "" {
 		return errors.New("supply --config with the private operator configuration")
 	}
 	settings, err := protectedmcp.LoadSettings(*configPath)
 	if err != nil {
 		return err
+	}
+	if *recoverRequest != "" {
+		status, err := protectedmcp.InspectInterruptedRequest(settings, *toolName, *recoverRequest, *closeInterrupted)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(os.Stdout).Encode(status)
 	}
 	if value := k.String("SIDECAR_URL"); value != "" {
 		settings.SidecarURL = value

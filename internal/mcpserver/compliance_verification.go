@@ -133,6 +133,7 @@ func validComplianceOwner(input complianceVerificationOwnerInput) bool {
 }
 func addComplianceVerificationTools(server *mcp.Server, backend *Backend, scopes []string) {
 	if slices.Contains(scopes, ComplianceVerificationReadScope) {
+		addResourceHistoryTool(server, backend)
 		addWorkspaceTool(server, backend, delegatedToolInput[complianceVerificationHandoffInput]{name: "authrail_get_test_definition", description: "Read one exact visible definition with bounded procedure or expected-proof content and the current owner revision. This neither records proof nor selects another version.", scope: ComplianceVerificationReadScope, method: http.MethodGet, readonly: true, prepare: func(input complianceVerificationHandoffInput) (string, any, error) {
 			if !validComplianceOwner(input.complianceVerificationOwnerInput) || !frameworkID.MatchString(input.DefinitionID) || input.RecordID != "" {
 				return "", nil, errors.New("Use exact owner and definition UUIDs")

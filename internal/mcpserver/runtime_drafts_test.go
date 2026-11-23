@@ -114,6 +114,9 @@ func TestDataDraftToolsUseBoundedNamedRoutes(t *testing.T) {
 		{"authrail_get_protected_mcp_setup", http.MethodGet, "/organisation/mcp/integrations/protected-mcp", map[string]any{}},
 		{"authrail_create_connected_action_draft", http.MethodPost, "/organisation/mcp/rails/action-drafts", map[string]any{"idempotencyKey": sourceID, "key": "invoice.pay", "name": "Pay invoice", "contract": map[string]any{"summary": "Candidate for human review"}}},
 		{"authrail_save_connected_action_draft", http.MethodPatch, "/organisation/mcp/rails/actions/" + operationID + "/drafts/" + versionID, map[string]any{"operationId": operationID, "versionId": versionID, "revision": 7, "name": "Pay invoice", "contract": map[string]any{"summary": "Changed candidate for review"}}},
+		{"authrail_get_connected_action_version", http.MethodGet, "/organisation/mcp/rails/actions/" + operationID + "/versions/" + versionID, map[string]any{"operationId": operationID, "versionId": versionID}},
+		{"authrail_get_connected_action_history", http.MethodGet, "/organisation/mcp/rails/actions/" + operationID + "/versions?cursor=" + versionID + "&limit=10", map[string]any{"operationId": operationID, "cursor": versionID, "limit": 10}},
+		{"authrail_continue_connected_action_draft", http.MethodPost, "/organisation/mcp/rails/actions/" + operationID + "/drafts", map[string]any{"operationId": operationID, "basedOnVersionId": versionID, "revision": 7, "idempotencyKey": sourceID}},
 		{"authrail_get_data_source_options", http.MethodGet, "/organisation/mcp/rails/data-source-options", map[string]any{}},
 		{"authrail_list_data_sources", http.MethodGet, "/organisation/mcp/rails/data-sources?afterId=" + sourceID + "&limit=10", map[string]any{"limit": 10, "afterId": sourceID}},
 		{"authrail_get_data_source", http.MethodGet, "/organisation/mcp/rails/data-sources/" + sourceID, map[string]any{"sourceId": sourceID}},
@@ -213,6 +216,13 @@ func TestDataDraftToolsUseBoundedNamedRoutes(t *testing.T) {
 							t.Error("revision or path IDs were not translated correctly")
 						}
 					}
+					if tool == "authrail_continue_connected_action_draft" {
+						var body map[string]any
+						_ = json.NewDecoder(r.Body).Decode(&body)
+						if len(body) != 3 || body["revision"] != float64(7) || body["basedOnVersionId"] != versionID || body["idempotencyKey"] != sourceID {
+							t.Error("action continuation lost its exact predecessor/retry identity or forwarded a path authority")
+						}
+					}
 				}
 				if !found {
 					t.Errorf("unexpected Data route %s", r.URL.Path)
@@ -268,6 +278,21 @@ func TestDataDraftToolsUseBoundedNamedRoutes(t *testing.T) {
 				t.Fatal("unexpected backend calls")
 			}
 			if scope {
+				for _, invalid := range []struct {
+					tool string
+					args map[string]any
+				}{
+					{"authrail_get_connected_action_version", map[string]any{"operationId": "../../other", "versionId": versionID}},
+					{"authrail_get_connected_action_history", map[string]any{"operationId": operationID, "cursor": "foreign/path", "limit": 10}},
+					{"authrail_get_connected_action_history", map[string]any{"operationId": operationID, "limit": 51}},
+					{"authrail_continue_connected_action_draft", map[string]any{"operationId": operationID, "basedOnVersionId": versionID, "revision": 0, "idempotencyKey": sourceID}},
+					{"authrail_continue_connected_action_draft", map[string]any{"operationId": operationID, "basedOnVersionId": versionID, "revision": 7, "idempotencyKey": sourceID, "organisationId": "org-2"}},
+				} {
+					result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: invalid.tool, Arguments: invalid.args})
+					if err == nil && !result.IsError {
+						t.Fatal("action lifecycle accepted a malformed reference, stale revision, oversized page or agent-selected tenant")
+					}
+				}
 				for _, invalid := range []map[string]any{{"railId": railID, "versionId": versionID, "revision": 0}, {"railId": railID, "versionId": versionID, "revision": 7, "organisationId": "org-2"}} {
 					result, err := session.CallTool(ctx, &mcp.CallToolParams{Name: "authrail_test_data_rail_draft", Arguments: invalid})
 					if err == nil && !result.IsError {
@@ -295,6 +320,8 @@ func TestRuntimeRecordReadHasSeparateConsent(t *testing.T) {
 	for _, allowed := range []bool{false, true} {
 		t.Run(map[bool]string{false: "draft-only", true: "record-consent"}[allowed], func(t *testing.T) {
 			var reads atomic.Int32
+			var delegations atomic.Int32
+			cursor := "00000000-0000-4000-8000-000000000003"
 			api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				switch r.URL.Path {
@@ -305,6 +332,7 @@ func TestRuntimeRecordReadHasSeparateConsent(t *testing.T) {
 					}
 					_ = json.NewEncoder(w).Encode(Identity{Active: true, UserID: "user-1", SessionID: "session-1", OrganisationID: "org-1", ClientID: "client-1", Scopes: scopes, ExpiresAt: time.Now().Add(time.Minute)})
 				case "/auth/mcp/delegations/exchange":
+					delegations.Add(1)
 					var input struct{ Token, Tool string }
 					_ = json.NewDecoder(r.Body).Decode(&input)
 					if !allowed || input.Tool != "authrail_get_runtime_action" {
@@ -317,6 +345,27 @@ func TestRuntimeRecordReadHasSeparateConsent(t *testing.T) {
 					}
 					reads.Add(1)
 					_ = json.NewEncoder(w).Encode(map[string]any{"organisationId": "org-1", "userId": "user-1", "data": map[string]any{"action": map[string]any{"state": "succeeded"}}})
+				case "/organisation/mcp/runtime/deployments/00000000-0000-4000-8000-000000000001/actions/00000000-0000-4000-8000-000000000002/history":
+					if r.Method != http.MethodGet || r.Header.Get("Authorization") != "Bearer record-delegation" || r.Header.Get("X-Organisation-Id") != "org-1" {
+						t.Error("wrong paginated record authority")
+					}
+					reads.Add(1)
+					query := r.URL.Query()
+					if query.Get("kind") != "receipts" {
+						t.Error("unexpected history kind")
+					}
+					var nextCursor any = cursor
+					if query.Get("cursor") == "" {
+						if query.Get("limit") != "10" || len(query) != 2 {
+							t.Errorf("wrong initial history query: %s", r.URL.RawQuery)
+						}
+					} else {
+						if query.Get("cursor") != cursor || query.Get("limit") != "3" || len(query) != 3 {
+							t.Errorf("wrong continued history query: %s", r.URL.RawQuery)
+						}
+						nextCursor = nil
+					}
+					_ = json.NewEncoder(w).Encode(map[string]any{"organisationId": "org-1", "userId": "user-1", "data": map[string]any{"records": []any{map[string]any{"id": cursor, "state": "unknown"}}, "pageInfo": map[string]any{"nextCursor": nextCursor}}})
 				default:
 					t.Errorf("unexpected record route: %s", r.URL.Path)
 					w.WriteHeader(404)
@@ -355,8 +404,46 @@ func TestRuntimeRecordReadHasSeparateConsent(t *testing.T) {
 				if err != nil || result.IsError || reads.Load() != 1 {
 					t.Fatalf("record read failed: %+v %v", result, err)
 				}
+				for index, arguments := range []map[string]any{
+					{"deploymentId": "00000000-0000-4000-8000-000000000001", "actionId": "00000000-0000-4000-8000-000000000002", "historyKind": "receipts"},
+					{"deploymentId": "00000000-0000-4000-8000-000000000001", "actionId": "00000000-0000-4000-8000-000000000002", "historyKind": "receipts", "historyCursor": cursor, "limit": 3},
+				} {
+					page, err := client.CallTool(ctx, &mcp.CallToolParams{Name: "authrail_get_runtime_action", Arguments: arguments})
+					if err != nil || page.IsError {
+						t.Fatalf("history page failed: %+v %v", page, err)
+					}
+					encoded, _ := json.Marshal(page)
+					if index == 0 && !strings.Contains(string(encoded), `"nextCursor":"`+cursor+`"`) || index == 1 && !strings.Contains(string(encoded), `"nextCursor":null`) {
+						t.Fatalf("history cursor was lost: %s", encoded)
+					}
+				}
+				if reads.Load() != 3 || delegations.Load() != 3 {
+					t.Fatal("history pages did not keep the original delegated read authority")
+				}
+				for _, invalid := range []map[string]any{
+					{"historyCursor": cursor}, {"limit": 3}, {"historyKind": "unknown"},
+					{"historyKind": "receipts", "limit": 0}, {"historyKind": "receipts", "limit": 11},
+					{"historyKind": "receipts", "historyCursor": cursor + "&kind=approvals"},
+					{"historyKind": "receipts", "organisationId": "org-2"},
+				} {
+					invalid["deploymentId"] = "00000000-0000-4000-8000-000000000001"
+					invalid["actionId"] = "00000000-0000-4000-8000-000000000002"
+					refused, err := client.CallTool(ctx, &mcp.CallToolParams{Name: "authrail_get_runtime_action", Arguments: invalid})
+					if err == nil && !refused.IsError {
+						t.Fatal("invalid history input was accepted")
+					}
+				}
+				if reads.Load() != 3 || delegations.Load() != 3 {
+					t.Fatal("invalid history input reached the backend")
+				}
 			} else if reads.Load() != 0 || err == nil && !result.IsError {
 				t.Fatal("draft-only grant disclosed record")
+			}
+			if !allowed {
+				refused, err := client.CallTool(ctx, &mcp.CallToolParams{Name: "authrail_get_runtime_action", Arguments: map[string]any{"deploymentId": "00000000-0000-4000-8000-000000000001", "actionId": "00000000-0000-4000-8000-000000000002", "historyKind": "receipts", "historyCursor": cursor, "limit": 3}})
+				if err == nil && !refused.IsError || reads.Load() != 0 || delegations.Load() != 0 {
+					t.Fatal("history pagination bypassed separate Runtime read consent")
+				}
 			}
 		})
 	}

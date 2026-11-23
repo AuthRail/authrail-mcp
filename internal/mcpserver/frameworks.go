@@ -58,7 +58,7 @@ func addFrameworkTools(server *mcp.Server, backend *Backend) {
 			data, err := backend.governance(ctx, token, "authrail_get_organisation_framework", "/organisation/mcp/frameworks/"+input.OrganisationFrameworkID, identity)
 			return nil, data, err
 		})
-	mcp.AddTool(server, &mcp.Tool{Name: "authrail_get_framework_readiness", Description: "Read stored readiness and a bounded page of applicable Obligations. Restricted, stale or unevaluated results are not passing assessments. Follow pageInfo.nextCursor to continue.", Annotations: annotations},
+	mcp.AddTool(server, &mcp.Tool{Name: "authrail_get_framework_readiness", Description: "Read stored readiness and a bounded page of current Scope decisions with their Obligation readiness. Restricted, stale or unevaluated results are not passing assessments. Follow pageInfo.nextCursor to continue.", Annotations: annotations},
 		func(ctx context.Context, _ *mcp.CallToolRequest, input readinessInput) (*mcp.CallToolResult, map[string]any, error) {
 			if !frameworkID.MatchString(input.OrganisationFrameworkID) || input.Limit < 0 || input.Limit > 10 || len(input.Cursor) > 512 {
 				return nil, nil, errors.New("Use the selected Framework ID, a page size from 1 to 10, and the previous page’s cursor")

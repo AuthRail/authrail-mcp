@@ -490,13 +490,18 @@ func (c *Connector) executionClient(key string, saved *record) *authrail.Client 
 
 func (c *Connector) executor(bound tool, key string, saved *record) func(context.Context, map[string]any, authrail.ExecutionContext) (ToolResult, error) {
 	return func(ctx context.Context, args map[string]any, execution authrail.ExecutionContext) (ToolResult, error) {
+		downstream, release, err := leaseDownstream(ctx, c.config.Downstream)
+		if err != nil {
+			return ToolResult{}, err
+		}
+		defer release()
 		// Guards cannot redirect an authorised request to a different resource, and ownership is checked again after review.
 		reference, _ := args[bound.binding.ResourceField].(string)
 		resource, err := c.resolveResource(ctx, bound.binding, args)
 		if err != nil || resource != saved.ResourceID || reference != saved.ResourceReference || bound.validator.Validate(args) != nil {
 			return ToolResult{}, errors.New("protected resource or input changed")
 		}
-		available, err := discoverTools(ctx, c.config.Downstream)
+		available, err := discoverTools(ctx, downstream)
 		if err != nil {
 			return ToolResult{}, errors.New("downstream contract cannot be checked")
 		}
@@ -528,7 +533,7 @@ func (c *Connector) executor(bound tool, key string, saved *record) func(context
 			ctx, cancel = context.WithDeadline(ctx, *saved.DispatchDeadline)
 			defer cancel()
 		}
-		result, err := c.config.Downstream.CallTool(ctx, &mcp.CallToolParams{Name: bound.binding.DownstreamName, Arguments: args})
+		result, err := downstream.CallTool(ctx, &mcp.CallToolParams{Name: bound.binding.DownstreamName, Arguments: args})
 		if err != nil || result == nil || result.IsError || result.NeedsInput() || result.RequestState != "" {
 			return ToolResult{}, errors.New("downstream outcome must be inspected")
 		}

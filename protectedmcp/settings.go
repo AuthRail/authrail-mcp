@@ -118,7 +118,15 @@ func (t fixedTransport) RoundTrip(request *http.Request) (*http.Response, error)
 	clone.Header.Del("Cookie")
 	response, err := t.base.RoundTrip(clone)
 	if err != nil {
-		return nil, err
+		return nil, &DownstreamError{Status: TransportUnknown}
+	}
+	if response.StatusCode == 401 || response.StatusCode == 403 {
+		response.Body.Close()
+		return nil, &DownstreamError{Status: CredentialsRejected}
+	}
+	if (response.StatusCode == 404 || response.StatusCode == 410) && request.Header.Get("Mcp-Session-Id") != "" {
+		response.Body.Close()
+		return nil, &DownstreamError{Status: SessionUnavailable}
 	}
 	response.Body = &boundedBody{ReadCloser: response.Body, left: 1 << 20}
 	return response, nil
@@ -156,10 +164,18 @@ func ConnectDownstream(ctx context.Context, settings Settings) (*mcp.ClientSessi
 	}
 	token, err := privateToken(settings.DownstreamTokenFile)
 	if err != nil {
-		return nil, err
+		return nil, &DownstreamError{Status: CredentialsUnavailable}
 	}
 	client := &http.Client{Transport: fixedTransport{endpoint.Scheme + "://" + endpoint.Host, endpoint.EscapedPath(), token, http.DefaultTransport}, Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	return mcp.NewClient(&mcp.Implementation{Name: "authrail-protected-mcp", Version: "0.1.0"}, nil).Connect(ctx, &mcp.StreamableClientTransport{Endpoint: endpoint.String(), HTTPClient: client, MaxRetries: -1, DisableStandaloneSSE: true}, nil)
+	session, err := mcp.NewClient(&mcp.Implementation{Name: "authrail-protected-mcp", Version: "0.1.0"}, nil).Connect(ctx, &mcp.StreamableClientTransport{Endpoint: endpoint.String(), HTTPClient: client, MaxRetries: -1, DisableStandaloneSSE: true}, nil)
+	if err != nil {
+		var known *DownstreamError
+		if errors.As(err, &known) {
+			return nil, known
+		}
+		return nil, &DownstreamError{Status: TransportUnknown}
+	}
+	return session, nil
 }
 
 // Open reuses the existing sidecar setup identity and keys; it never obtains a deployment token.
@@ -256,11 +272,7 @@ func Open(ctx context.Context, settings Settings, downstream ToolClient) (*Conne
 		case "quickbooks":
 			binding.AccessTokenProvider = getter
 		case "customer_api":
-			credential, err := getter(ctx)
-			if err != nil {
-				return nil, err
-			}
-			binding.Read, err = authrail.NewCustomerAPIReader(authrail.CustomerAPIConfig{Endpoint: spec.Endpoint, BearerToken: credential, SourceIdentity: spec.SourceIdentity, AccountBoundary: spec.AccountBoundary, Lookup: spec.Lookup})
+			binding.Read, err = privateCustomerAPIReader(authrail.CustomerAPIConfig{Endpoint: spec.Endpoint, SourceIdentity: spec.SourceIdentity, AccountBoundary: spec.AccountBoundary, Lookup: spec.Lookup}, spec.TokenFile)
 			if err != nil {
 				return nil, err
 			}
@@ -270,15 +282,11 @@ func Open(ctx context.Context, settings Settings, downstream ToolClient) (*Conne
 		config.Runtime.DataSources = append(config.Runtime.DataSources, binding)
 	}
 	if settings.ResourceLookup != nil {
-		spec := settings.ResourceLookup
+		spec := *settings.ResourceLookup
 		if spec.MaxAgeSeconds < 1 || spec.MaxAgeSeconds > 3600 {
 			return nil, errors.New("resource lookup requires a reviewed freshness limit of 1–3600 seconds")
 		}
-		credential, err := privateToken(spec.TokenFile)
-		if err != nil {
-			return nil, err
-		}
-		reader, err := authrail.NewCustomerAPIReader(authrail.CustomerAPIConfig{Endpoint: spec.Endpoint, BearerToken: credential, SourceIdentity: "protected.resources", AccountBoundary: spec.AccountBoundary, Lookup: "resource.read"})
+		reader, err := privateCustomerAPIReader(authrail.CustomerAPIConfig{Endpoint: spec.Endpoint, SourceIdentity: "protected.resources", AccountBoundary: spec.AccountBoundary, Lookup: "resource.read"}, spec.TokenFile)
 		if err != nil {
 			return nil, err
 		}
@@ -300,4 +308,39 @@ func Open(ctx context.Context, settings Settings, downstream ToolClient) (*Conne
 		}
 	}
 	return New(ctx, config)
+}
+
+// Only the private bearer changes; the reviewed destination/account/source remain fixed.
+func privateCustomerAPIReader(config authrail.CustomerAPIConfig, tokenFile string) (authrail.CustomerRead, error) {
+	token, err := privateToken(tokenFile)
+	if err != nil {
+		return nil, &DownstreamError{Status: CredentialsUnavailable}
+	}
+	config.BearerToken = token
+	if _, err := authrail.NewCustomerAPIReader(config); err != nil {
+		return nil, err
+	}
+	config.BearerToken = "" // Keep only the private file path between reads.
+	return func(ctx context.Context, key string) (authrail.CustomerReadResult, error) {
+		ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+		defer cancel()
+		token, err := privateToken(tokenFile)
+		if err != nil {
+			return authrail.CustomerReadResult{}, &DownstreamError{Status: CredentialsUnavailable}
+		}
+		current := config
+		current.BearerToken = token
+		reader, err := authrail.NewCustomerAPIReader(current)
+		if err != nil {
+			return authrail.CustomerReadResult{}, err
+		}
+		result, err := reader(ctx, key)
+		if err != nil {
+			return authrail.CustomerReadResult{}, err
+		}
+		if result.SourceIdentity != config.SourceIdentity || result.AccountBoundary != config.AccountBoundary || result.Lookup != config.Lookup || result.LookupKey != key {
+			return authrail.CustomerReadResult{}, errors.New("customer source identity changed")
+		}
+		return result, nil
+	}, nil
 }

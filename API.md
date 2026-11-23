@@ -305,6 +305,19 @@ Create an unconfirmed action draft.
 Save an action draft at its expected revision.
 `authrail_save_connected_action_draft`
 
+Read one exact retained action contract and its lifecycle.
+`authrail_get_connected_action_version`
+
+Page numbered action history newest first using the returned cursor and a limit
+up to50. Exact-version reads contain the contract.
+`authrail_get_connected_action_history`
+
+Continue a confirmed predecessor as an unconfirmed successor using its exact
+revision and a retained UUID retry key. Identical retries return the same successor,
+including after review; human confirmation remains separate. No Rail or deployment
+binding changes automatically.
+`authrail_continue_connected_action_draft`
+
 Read an exact Rail draft.
 `authrail_get_rail_draft`
 
@@ -473,7 +486,7 @@ Prepare an approve, reject or cancel decision for human confirmation.
 
 ### Action history — `runtime.read`
 
-Read bounded Action, decision and execution-receipt metadata.
+Read the Action summary or cursor-page safe certificate, receipt or approval metadata using historyKind and optional historyCursor; limit is 1–10.
 `authrail_get_runtime_action`
 
 ### Existing compliance records — `governance.read`
@@ -532,6 +545,17 @@ Read saved request status without executing or releasing cached output.
 Inputs and results follow the registered schemas in
 [protectedmcp/connector.go](protectedmcp/connector.go). The checked business result
 is `{text: string, data: object}`. Unreviewed content is withheld.
+
+Embedded applications can use `ConnectManagedDownstream` with a fixed account
+witness and a trusted read-only `DownstreamIdentityVerifier`. Explicit `Refresh`
+verifies the replacement account, server and reviewed schemas, and returns busy
+while an operation leases the old session. It preserves pending work and never
+retries a business call. `DownstreamError.Status` distinguishes unavailable files,
+HTTP rejection, missing session and uncertain transport; expiry/revocation require
+trusted verifier facts. The legacy stdio/fixed-session path has no automatic token
+reload. Customer API/resource readers refresh private credentials per read while
+retaining their exact account and resource checks. See
+[the managed connector API](protectedmcp/managed_downstream.go).
 
 ## AuthRail API bindings
 

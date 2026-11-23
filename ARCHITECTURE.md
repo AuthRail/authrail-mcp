@@ -102,6 +102,13 @@ it does not establish account access or protected execution.
 
 ## Drafts, decisions and history
 
+Connected action continuation retains an exact predecessor and durable retry key
+under the same action identity. History uses bounded numbered-version summaries;
+exact reads retain immutable contracts. Retrying continuation returns its original
+successor regardless of its later lifecycle, and only a draft receives a human
+review link. Neither continuation nor review silently rebinds existing Rails or
+deployments; unchanged retained protection renews against its exact saved binding.
+
 Draft preparation uses the owning domain services, stable creation keys and
 expected revisions. A conflicting save requires rereading and reconciling the
 draft. Action and source drafts need human review; Rail drafts need exact human
@@ -232,6 +239,25 @@ checks, approval permits and execution reports. Result checks run before disclos
 Non-text content, interactive input requests and unreviewed shapes are withheld.
 An execution report records what the connector reported, not independent proof of
 the provider's effect.
+
+Applications may use `ConnectManagedDownstream` with a fixed expected account and
+an owner-supplied read-only identity verifier. Initial connection and explicit
+`Refresh` verify the authenticated account, server compatibility and reviewed tool
+schemas before replacing a session. A connector operation leases one session from
+its resource/schema rechecks through dispatch; refresh returns busy while leased.
+Failed refresh preserves the previous session and never repeats a business call.
+The verifier's caller wait is bounded by its context and 30 seconds. A callback that
+ignores cancellation still owns its work; only one unfinished verifier is retained,
+late results are discarded and unused candidate sessions are closed. The owner
+must bound and release any additional resources used by its verifier.
+
+The legacy `ConnectDownstream` and stdio command retain their fixed-session
+contract; generic MCP metadata cannot supply the required account proof. There is
+no automatic credential reload for business dispatch. Customer API and resource
+readers reread their private credential file on each read while retaining the fixed
+account, endpoint, resource and principal checks. Managed downstream errors
+distinguish HTTP rejection, missing session and uncertain transport; expiration or
+revocation requires a trusted verifier fact. Refresh preserves the connector journal and pending work.
 
 ## Request recovery
 

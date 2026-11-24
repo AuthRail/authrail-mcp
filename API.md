@@ -222,6 +222,21 @@ Read one available tool's exact reviewed input/result contracts.
 These reads do not execute a provider operation or grant account access. A page
 can be empty with a continuation cursor when stale contracts are filtered.
 
+### Human file selection — `business.execute`
+
+`authrail_prepare_business_file` prepares the exact reviewed route/binding,
+non-file arguments, caller audience and UUID request key. It returns an authenticated
+human handoff; the assistant cannot upload bytes or receive the presigned capability.
+`authrail_get_business_file` reads only the original selection and safe immutable
+metadata through its original MCP client/session. Only a ready reference belongs
+in `selectedFile` for the same route/arguments. `authrail_revoke_business_file`
+withdraws that selection without undoing a dispatched provider effect.
+
+Actor selections are specific to the original signed-in assistant connection;
+deployment selections are for the named SDK workload and are refused to hosted
+assistants. File selection does not approve or dispatch the business operation.
+The ordinary business-request tools below remain its execution/status owners.
+
 ### Business requests — `business.execute`
 
 Save one exact reviewed route, binding digest and argument object under a stable UUID request key.

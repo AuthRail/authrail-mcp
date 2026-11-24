@@ -47,6 +47,7 @@ type businessRequestMutation struct {
 }
 
 func addBusinessExecutionTools(server *mcp.Server, backend *Backend) {
+	addBusinessFileTools(server, backend)
 	uuid := map[string]any{"type": "string", "pattern": frameworkID.String()}
 	mcp.AddTool(server, &mcp.Tool{Name: "authrail_request_business_action", Description: "Save and request one exact reviewed business action. Use the route and binding returned by AuthRail's reviewed-tool discovery, the reviewed tool's arguments and a UUID idempotency key reused only for identical work. AuthRail checks current authority and Rails. Waiting for approval or an unknown outcome never authorises another write.",
 		InputSchema: map[string]any{"type": "object", "additionalProperties": false, "required": []string{"routeId", "bindingSha256", "idempotencyKey", "arguments"}, "properties": map[string]any{
@@ -132,12 +133,18 @@ func safeBusinessRequest(data map[string]any) (map[string]any, error) {
 			return nil, errBackend
 		}
 	}
- if value, exists := data["cancellationRequested"]; exists { if _, ok := value.(bool); !ok { return nil, errBackend } }
- if value, exists := data["taskState"]; exists {
-  state, ok := value.(string)
-  states := map[string]bool{"TASK_STATE_UNSPECIFIED":true,"TASK_STATE_SUBMITTED":true,"TASK_STATE_WORKING":true,"TASK_STATE_COMPLETED":true,"TASK_STATE_FAILED":true,"TASK_STATE_CANCELED":true,"TASK_STATE_INPUT_REQUIRED":true,"TASK_STATE_REJECTED":true,"TASK_STATE_AUTH_REQUIRED":true}
-  if !ok || !states[state] { return nil, errBackend }
- }
+	if value, exists := data["cancellationRequested"]; exists {
+		if _, ok := value.(bool); !ok {
+			return nil, errBackend
+		}
+	}
+	if value, exists := data["taskState"]; exists {
+		state, ok := value.(string)
+		states := map[string]bool{"TASK_STATE_UNSPECIFIED": true, "TASK_STATE_SUBMITTED": true, "TASK_STATE_WORKING": true, "TASK_STATE_COMPLETED": true, "TASK_STATE_FAILED": true, "TASK_STATE_CANCELED": true, "TASK_STATE_INPUT_REQUIRED": true, "TASK_STATE_REJECTED": true, "TASK_STATE_AUTH_REQUIRED": true}
+		if !ok || !states[state] {
+			return nil, errBackend
+		}
+	}
 	// Keep output within the same bounded protocol envelope as the API response.
 	encoded, err := json.Marshal(data)
 	if err != nil || len(encoded) > maxResponse {

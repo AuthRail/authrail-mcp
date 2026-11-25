@@ -2,11 +2,13 @@ package mcpserver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/url"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -14,15 +16,22 @@ import (
 // Keep these public setup identifiers aligned with the server's business registry.
 var businessProviderKeys = []string{"aws", "azure", "cloudflare", "github", "gitlab", "okta", "jamf", "crowdstrike", "snyk", "datadog", "splunk", "pagerduty", "snowflake", "knowbe4", "onetrust", "stripe", "openai", "azure-openai", "anthropic", "jira", "confluence", "notion", "linear", "asana", "gcp", "google-workspace", "xai", "quickbooks", "hubspot"}
 
+type businessAccountSetup struct {
+	DisplayName string            `json:"displayName,omitempty"`
+	Boundary    map[string]string `json:"boundary,omitempty"`
+	Access      []string          `json:"access,omitempty"`
+}
+
 type businessAccountHandoffInput struct {
-	Action       string `json:"action"`
-	ProviderKey  string `json:"providerKey,omitempty"`
-	ConnectionID string `json:"connectionId,omitempty"`
+	Action       string                `json:"action"`
+	ProviderKey  string                `json:"providerKey,omitempty"`
+	ConnectionID string                `json:"connectionId,omitempty"`
+	Setup        *businessAccountSetup `json:"setup,omitempty"`
 }
 
 func addBusinessConnectionTools(server *mcp.Server, backend *Backend) {
 	for _, listing := range []struct{ name, path, description string }{
-		{"authrail_list_business_providers", "/organisation/mcp/connections/business/providers", "List business account providers and their saved setup availability. This does not connect an account or grant permission to run tools. Continue using pageInfo.nextCursor."},
+		{"authrail_list_business_providers", "/organisation/mcp/connections/business/providers", "List business account providers, current app setup availability, non-secret setup field names and available permission names for preparing an account draft. This does not connect an account or grant permission to run tools. Continue using pageInfo.nextCursor."},
 		{"authrail_list_business_accounts", "/organisation/mcp/connections/business/accounts", "List the workspace's business accounts and saved review status. This does not contact providers or reveal credentials. Continue using pageInfo.nextCursor."},
 	} {
 		mcp.AddTool(server, &mcp.Tool{Name: listing.name, Description: listing.description, Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true}},
@@ -55,14 +64,30 @@ func addBusinessConnectionTools(server *mcp.Server, backend *Backend) {
 }
 
 func addBusinessConnectionManagementTools(server *mcp.Server, backend *Backend) {
-	mcp.AddTool(server, &mcp.Tool{Name: "authrail_manage_business_account", Description: "Open a secure AuthRail page to connect a business account, review its tools, change its access or disconnect it. Requires separate account-management consent. The person must sign in and finish the action. Never submit credentials, server addresses or tool arguments.", InputSchema: map[string]any{
+	mcp.AddTool(server, &mcp.Tool{Name: "authrail_manage_business_account", Description: "Open a secure AuthRail page to connect a business account, review its tools, change its access or disconnect it. Requires separate account-management consent. For connect, optionally prepare non-secret account details and requested access in setup. The person reviews the draft, supplies credentials privately or completes provider sign-in, and confirms. A draft grants no authority. Never submit credentials, server addresses or tool arguments.", InputSchema: map[string]any{
 		"type": "object", "additionalProperties": false, "required": []string{"action"},
 		"properties": map[string]any{
 			"action":       map[string]any{"type": "string", "enum": []string{"connect", "review", "access", "disconnect"}},
 			"providerKey":  map[string]any{"type": "string", "enum": businessProviderKeys, "description": "Required only for connect"},
 			"connectionId": map[string]any{"type": "string", "minLength": 36, "maxLength": 36, "description": "Required only for review, access or disconnect"},
+			"setup": map[string]any{"type": "object", "additionalProperties": false, "description": "Optional connect draft, at most 4096 JSON characters. Only provider account details and requested permissions; no secrets, addresses or advanced execution contracts.", "properties": map[string]any{
+				"displayName": map[string]any{"type": "string", "minLength": 3, "maxLength": 160},
+				"boundary":    map[string]any{"type": "object", "maxProperties": 30, "additionalProperties": map[string]any{"type": "string", "maxLength": 300}},
+				"access":      map[string]any{"type": "array", "maxItems": 100, "uniqueItems": true, "items": map[string]any{"type": "string", "minLength": 1, "maxLength": 300}},
+			}},
 		},
 	}}, func(ctx context.Context, _ *mcp.CallToolRequest, input businessAccountHandoffInput) (*mcp.CallToolResult, map[string]any, error) {
+		if input.Setup != nil {
+			encoded, err := json.Marshal(input.Setup)
+			if input.Action != "connect" || err != nil || len(encoded) > 4096 || len(input.Setup.Boundary) > 30 {
+				return nil, nil, errors.New("Use a small non-secret setup draft only when connecting an account")
+			}
+			for key, value := range input.Setup.Boundary {
+				if slices.Contains([]string{"credential", "credentials", "token", "accesstoken", "refreshtoken", "apikey", "password", "clientsecret", "privatekey", "accesskeyid", "secretaccesskey", "sessiontoken", "origin", "orgurl", "endpoint", "url"}, strings.ToLower(key)) || strings.ContainsAny(value, "\r\n\x00") || strings.Contains(strings.ToLower(value), "http://") || strings.Contains(strings.ToLower(value), "https://") {
+					return nil, nil, errors.New("Enter credentials and service addresses privately in AuthRail")
+				}
+			}
+		}
 		switch input.Action {
 		case "connect":
 			if !slices.Contains(businessProviderKeys, input.ProviderKey) || input.ConnectionID != "" {

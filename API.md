@@ -266,7 +266,8 @@ List saved customer MCP connections without contacting their servers.
 Read saved tool names and review status for one customer MCP connection.
 `authrail_get_custom_connection`
 
-List the selected native business providers, including HubSpot, without connecting an account.
+List native business providers, app setup availability, non-secret setup fields and
+available permission names without connecting an account.
 `authrail_list_business_providers`
 
 List saved native business accounts.
@@ -284,7 +285,9 @@ Read one agent connection's saved skill summary without credentials.
 ### Account setup — `connections.manage`
 
 Open secure account setup, tool review, access replacement or disconnection.
-Credentials and the final human action stay on the authenticated AuthRail page.
+Connecting accepts an optional bounded draft of non-secret account details and
+requested permissions. Credentials and the final human action stay on the
+authenticated AuthRail page; preparation never connects or authorises an account.
 `authrail_manage_business_account`
 
 

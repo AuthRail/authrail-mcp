@@ -74,8 +74,13 @@ administrator account.
 ## Connect an account, MCP server or agent
 
 Ask the assistant to show available business providers or open account setup.
-The setup link takes you to AuthRail, where you supply access and choose the
-account, resources and supported tools. The API checks a permitted read before
+Provider discovery includes app setup availability, safe account field names and
+permission names, so the assistant can prepare a draft without guessing.
+The assistant can prepare a name, non-secret account/resource details and requested
+permissions before opening setup. The link carries this untrusted draft in its URL
+fragment; AuthRail removes the fragment after reading it. You review and edit the
+details in AuthRail, then supply private access or complete provider sign-in.
+The API checks a permitted read before
 saving encrypted account access. You then review which apps and business actions
 may use each tool.
 

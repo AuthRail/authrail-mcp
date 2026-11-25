@@ -65,8 +65,12 @@ require reconnection; no token or consent is silently migrated.
 Account management has separate `connections.manage` consent. The assistant
 can find provider setup options and request a fixed AuthRail browser link.
 The API checks live account-management permission; the person signs in and
-completes provider consent, reconnect or disconnect. Link creation and page
-opening do not change account access or disclose credentials.
+completes provider consent, reconnect or disconnect. Connect links may carry a
+validated, bounded draft of non-secret account details and requested permissions
+in the URL fragment. The client treats it as untrusted prefill, removes the
+fragment and requires human review; normal submission revalidates current
+authority and provider access. Link creation and page opening do not change
+account access or disclose credentials.
 
 Custom MCP is a connection option within the same product. Separate named tools
 list saved server status and tool names or open an authenticated human handoff.

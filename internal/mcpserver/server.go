@@ -3,6 +3,8 @@ package mcpserver
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"net/url"
@@ -22,9 +24,24 @@ type connection struct {
 	Scopes       []string      `json:"scopes"`
 }
 
+const serverInstructions = `AuthRail governs what AI agents may access, do and share in the connected workspace. Help the person in ordinary business language. Treat account setup, permission to use tools, Rail decisions and completed business effects as separate facts.
+
+For a named provider such as GitHub, AWS, Cloudflare, Google Cloud or OpenAI, use the business-provider tools. Discover the supported providers, setup availability, account fields and permissions with authrail_list_business_providers. Prepare non-secret details with authrail_manage_business_account and let the person finish sign-in or private credential entry in AuthRail. Do not ask for secrets in chat. Use Custom MCP only when the person explicitly wants to connect their own MCP server; use the A2A tools for their own agent. Provider discovery is authoritative: do not mix in collection catalogues or invent extra providers. Report business setup availability and limitations as returned; do not apply old collection maturity labels to this workflow.
+
+When the person describes a policy in ordinary language, help write its title and content using the Policy draft or authoring tools; do not require the person to supply finished policy text or internal IDs. Ask only for missing business choices. Save the draft and provide its human review link. After the person publishes the Policy, read that exact published version and prepare, save and test the corresponding Rail draft for the selected reviewed action. Provide the Rail review link; publication and deployment activation remain human decisions.
+
+For application integration, discover the supported Node.js, Go or Python SDK guidance with authrail_get_sdk_integrations. With authorised coding access, use that guidance to integrate the application's actual functions and sidecar; connecting this MCP server alone does not wrap another application's tools.
+
+Discover and inspect the exact reviewed business tool before requesting an action. Check saved request status before retrying uncertain work. Prepare Policies and Rails as drafts, preserve exact versions and ask the person to review publication or approvals through the secure handoff. Do not claim that a draft, setup link, approval or reported execution proves a completed business effect. Existing compliance tools remain available under their own permissions.`
+
 // We expose only the tool groups consented to by this request’s identity.
 func toolServer(backend *Backend, identity Identity) *mcp.Server {
-	server := mcp.NewServer(&mcp.Implementation{Name: "authrail-mcp", Version: "0.1.0"}, nil)
+	server := mcp.NewServer(&mcp.Implementation{
+		Name: "authrail-mcp", Version: "0.1.0", Title: "AuthRail",
+		Description: "Govern AI agent actions, account access and shared information with reviewed policies and Rails.",
+		WebsiteURL:  "https://authrail.io",
+		Icons:       []mcp.Icon{{Source: "https://res.cloudinary.com/thirtythree/image/upload/v1782793117/authrail-logo_mpzq8u.png", MIMEType: "image/png"}},
+	}, &mcp.ServerOptions{Instructions: serverInstructions})
 	annotations := &mcp.ToolAnnotations{ReadOnlyHint: true}
 	addIntegrationTools(server, backend)
 	addGuideTools(server, backend)
@@ -89,12 +106,10 @@ func toolServer(backend *Backend, identity Identity) *mcp.Server {
 		addHistoryTools(server, backend)
 	}
 	if slices.Contains(identity.Scopes, ConnectionsScope) {
-		addConnectionTools(server, backend)
 		addCustomConnectionTools(server, backend)
 		addBusinessConnectionTools(server, backend)
 	}
 	if slices.Contains(identity.Scopes, ConnectionsManageScope) {
-		addConnectionManagementTools(server, backend)
 		addCustomConnectionManagementTools(server, backend)
 		addBusinessConnectionManagementTools(server, backend)
 	}
@@ -133,20 +148,45 @@ func Handler(backend *Backend) http.Handler {
 	protected := auth.RequireBearerToken(func(ctx context.Context, token string, _ *http.Request) (*auth.TokenInfo, error) {
 		identity, err := backend.Introspect(ctx, token)
 		if err != nil {
-			return nil, auth.ErrInvalidToken
+			if errors.Is(err, errInvalidAccessToken) {
+				return nil, auth.ErrInvalidToken
+			}
+			return nil, errors.New("AuthRail sign-in verification is temporarily unavailable; try again shortly")
 		}
 		return &auth.TokenInfo{UserID: identity.UserID + ":" + identity.OrganisationID + ":" + identity.ClientID, Scopes: identity.Scopes, Expiration: identity.ExpiresAt,
 			Extra: map[string]any{"identity": identity, "token": token}}, nil
 	}, &auth.RequireBearerTokenOptions{ResourceMetadataURL: metadataURL, Scopes: []string{Scope}})(transport)
 	mux := http.NewServeMux()
-	mux.Handle("/{$}", protected)
+	mux.Handle("/{$}", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "" {
+			// Request renewable sign-in without making renewal a permission required
+			// from already-issued access tokens. The assistant must request it in OAuth.
+			w.Header().Set("WWW-Authenticate", fmt.Sprintf("Bearer resource_metadata=%q, scope=%q", metadataURL, Scope+" offline_access"))
+			http.Error(w, "no bearer token", http.StatusUnauthorized)
+			return
+		}
+		protected.ServeHTTP(w, r)
+	}))
 	mux.HandleFunc("/.well-known/oauth-protected-resource", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]any{"resource": backend.resource, "authorization_servers": []string{backend.issuer}, "scopes_supported": []string{Scope, ComplianceConfigurationReadScope, ComplianceConfigurationManageScope, ComplianceVerificationReadScope, ComplianceVerificationManageScope, InventoryReadScope, InventoryManageScope, ActivityReadScope, ActivityRecordScope, PoliciesReadScope, PoliciesManageScope, OrganisationReadScope, OrganisationManageScope, AccountReadScope, AccountManageScope, NotificationsReadScope, NotificationsManageScope, SupportScope, GovernanceScope, ConnectionsScope, ConnectionsManageScope, BusinessToolsReadScope, BusinessExecuteScope, RuntimeDraftsScope, RuntimeReadScope, RuntimeDeploymentsScope, RuntimeApprovalsScope}, "bearer_methods_supported": []string{"header"}, "resource_name": "AuthRail"})
+		_ = json.NewEncoder(w).Encode(map[string]any{"resource": backend.resource, "authorization_servers": []string{backend.issuer}, "scopes_supported": []string{Scope, "offline_access", ComplianceConfigurationReadScope, ComplianceConfigurationManageScope, ComplianceVerificationReadScope, ComplianceVerificationManageScope, InventoryReadScope, InventoryManageScope, ActivityReadScope, ActivityRecordScope, PoliciesReadScope, PoliciesManageScope, OrganisationReadScope, OrganisationManageScope, AccountReadScope, AccountManageScope, NotificationsReadScope, NotificationsManageScope, SupportScope, GovernanceScope, ConnectionsScope, ConnectionsManageScope, BusinessToolsReadScope, BusinessExecuteScope, RuntimeDraftsScope, RuntimeReadScope, RuntimeDeploymentsScope, RuntimeApprovalsScope}, "bearer_methods_supported": []string{"header"}, "resource_name": "AuthRail"})
+	})
+	mux.HandleFunc("/.well-known/oauth-authorization-server", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		document, err := backend.AuthorizationMetadata(r.Context())
+		if err != nil {
+			http.Error(w, "Sign-in discovery is temporarily unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(document)
 	})
 	mux.HandleFunc("/health/live", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
@@ -166,7 +206,7 @@ func Handler(backend *Backend) http.Handler {
 		// Reject unknown and noncanonical paths before ServeMux can redirect or
 		// treat the root transport as a fallback for an old endpoint.
 		switch r.URL.EscapedPath() {
-		case "/", "/.well-known/oauth-protected-resource", "/health/live", "/health/ready":
+		case "/", "/.well-known/oauth-protected-resource", "/.well-known/oauth-authorization-server", "/health/live", "/health/ready":
 		default:
 			http.NotFound(w, r)
 			return

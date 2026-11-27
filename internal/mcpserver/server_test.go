@@ -50,13 +50,14 @@ func TestRootListenerPublishesExactMetadataAndRejectsPathAliases(t *testing.T) {
 	}
 	if metadata.Code != http.StatusOK || json.Unmarshal(metadata.Body.Bytes(), &document) != nil ||
 		document.Resource != "https://mcp.authrail.io" || !slices.Equal(document.AuthorizationServers, []string{"https://api.authrail.io/auth"}) ||
-		!slices.Contains(document.ScopesSupported, BusinessToolsReadScope) {
+		!slices.Contains(document.ScopesSupported, BusinessToolsReadScope) || !slices.Contains(document.ScopesSupported, "offline_access") {
 		t.Fatalf("incorrect root metadata: %d %s", metadata.Code, metadata.Body.String())
 	}
 	for _, method := range []string{http.MethodGet, http.MethodPost} {
 		response := httptest.NewRecorder()
 		handler.ServeHTTP(response, httptest.NewRequest(method, "https://mcp.authrail.io/", nil))
-		if response.Code != http.StatusUnauthorized || !strings.Contains(response.Header().Get("WWW-Authenticate"), `resource_metadata="https://mcp.authrail.io`+metadataPath+`"`) {
+		if response.Code != http.StatusUnauthorized || !strings.Contains(response.Header().Get("WWW-Authenticate"), `resource_metadata="https://mcp.authrail.io`+metadataPath+`"`) ||
+			!strings.Contains(response.Header().Get("WWW-Authenticate"), `scope="workspace.read offline_access"`) {
 			t.Fatalf("missing root authorization challenge: %d %s", response.Code, response.Header())
 		}
 	}
@@ -75,6 +76,42 @@ func TestRootListenerPublishesExactMetadataAndRejectsPathAliases(t *testing.T) {
 		if response.Code != http.StatusForbidden {
 			t.Errorf("unsafe origin accepted: %s", origin)
 		}
+	}
+}
+
+func TestWorkspaceOnlyAccessTokenStillInitializesWithoutRenewalScope(t *testing.T) {
+	var introspections atomic.Int32
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/auth/mcp/introspect" {
+			t.Errorf("unexpected API path: %s", r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		introspections.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(Identity{Active: true, UserID: "user-1", SessionID: "session-1", OrganisationID: "org-1", ClientID: "client-1", Scopes: []string{Scope}, ExpiresAt: time.Now().Add(time.Minute)})
+	}))
+	defer api.Close()
+	backend, err := NewBackend(Config{APIURL: api.URL, ResourceURL: "https://mcp.authrail.io", ServiceToken: strings.Repeat("s", 32), AllowLoopback: true, TrustedAPIOrigin: api.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := httptest.NewRequest(http.MethodPost, "https://mcp.authrail.io/", strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"verification","version":"1"}}}`))
+	request.Header.Set("Authorization", "Bearer "+strings.Repeat("t", 32))
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "application/json, text/event-stream")
+	response := httptest.NewRecorder()
+	Handler(backend).ServeHTTP(response, request)
+	var initialized struct {
+		Result *struct {
+			ServerInfo mcp.Implementation `json:"serverInfo"`
+		} `json:"result"`
+	}
+	if response.Code != http.StatusOK || json.Unmarshal(response.Body.Bytes(), &initialized) != nil || initialized.Result == nil || initialized.Result.ServerInfo.Name != "authrail-mcp" {
+		t.Fatalf("workspace-only token failed initialization: %d %s", response.Code, response.Body.String())
+	}
+	if introspections.Load() != 1 || response.Header().Get("WWW-Authenticate") != "" {
+		t.Fatal("valid token was challenged or skipped live authority verification")
 	}
 }
 
@@ -268,6 +305,105 @@ func TestReadinessRequiresExactAuthenticatedOAuthConfiguration(t *testing.T) {
 			}
 			if leaked.Load() {
 				t.Fatal("private service credential followed redirect")
+			}
+		})
+	}
+}
+
+func TestMCPOriginAuthorizationDiscoveryKeepsTheConfiguredIssuer(t *testing.T) {
+	issuer := "https://api.example.test/auth"
+	mode := "valid"
+	var calls atomic.Int32
+	api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls.Add(1)
+		if r.URL.Path != "/.well-known/oauth-authorization-server/auth" || r.Method != http.MethodGet || r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" {
+			t.Error("discovery forwarded private context or changed the fixed API path")
+		}
+		w.Header().Set("Set-Cookie", "must-not-reach-client=private")
+		if mode == "redirect" {
+			w.Header().Set("Location", "https://elsewhere.example")
+			w.WriteHeader(302)
+			return
+		}
+		if mode == "oversize" {
+			_, _ = w.Write([]byte(strings.Repeat("x", 65537)))
+			return
+		}
+		doc := map[string]any{"issuer": issuer, "authorization_endpoint": issuer + "/oauth2/authorize", "token_endpoint": issuer + "/oauth2/token", "registration_endpoint": issuer + "/oauth2/register"}
+		if mode == "wrong-issuer" {
+			doc["issuer"] = "https://attacker.example/auth"
+		}
+		if mode == "wrong-endpoint" {
+			doc["token_endpoint"] = "https://attacker.example/token"
+		}
+		_ = json.NewEncoder(w).Encode(doc)
+	}))
+	defer api.Close()
+	backend, err := NewBackend(Config{APIURL: api.URL, AuthorizationServerURL: issuer, ResourceURL: "https://mcp.example.test", ServiceToken: strings.Repeat("s", 32), AllowLoopback: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := Handler(backend)
+	for _, scenario := range []struct {
+		mode string
+		want int
+	}{{"valid", 200}, {"wrong-issuer", 503}, {"wrong-endpoint", 503}, {"redirect", 503}, {"oversize", 503}} {
+		mode = scenario.mode
+		r := httptest.NewRequest(http.MethodGet, "https://mcp.example.test/.well-known/oauth-authorization-server", nil)
+		r.Header.Set("Authorization", "Bearer must-not-forward")
+		r.Header.Set("Cookie", "private=must-not-forward")
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		if w.Code != scenario.want || w.Header().Get("Set-Cookie") != "" {
+			t.Fatalf("%s discovery status/header: %d", mode, w.Code)
+		}
+		if scenario.want == 200 {
+			var doc map[string]any
+			_ = json.Unmarshal(w.Body.Bytes(), &doc)
+			if doc["issuer"] != issuer {
+				t.Fatal("issuer changed")
+			}
+		}
+	}
+	before := calls.Load()
+	for _, r := range []*http.Request{httptest.NewRequest(http.MethodPost, "https://mcp.example.test/.well-known/oauth-authorization-server", nil), httptest.NewRequest(http.MethodGet, "https://untrusted.example/.well-known/oauth-authorization-server", nil)} {
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, r)
+		if w.Code != 405 && w.Code != 403 {
+			t.Fatal("untrusted discovery accepted")
+		}
+	}
+	if calls.Load() != before {
+		t.Fatal("untrusted request reached backend")
+	}
+}
+
+func TestTokenVerificationOutageDoesNotInvalidateAssistantConnection(t *testing.T) {
+	for _, outage := range []bool{true, false} {
+		t.Run(map[bool]string{true: "backend outage", false: "inactive token"}[outage], func(t *testing.T) {
+			api := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if outage {
+					w.WriteHeader(http.StatusServiceUnavailable)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_, _ = w.Write([]byte(`{"active":false}`))
+			}))
+			defer api.Close()
+			backend, err := NewBackend(Config{APIURL: api.URL, ResourceURL: "https://mcp.authrail.io", ServiceToken: strings.Repeat("s", 32), AllowLoopback: true, TrustedAPIOrigin: api.URL})
+			if err != nil {
+				t.Fatal(err)
+			}
+			req := httptest.NewRequest(http.MethodPost, "https://mcp.authrail.io/", strings.NewReader(`{}`))
+			req.Header.Set("Authorization", "Bearer "+strings.Repeat("t", 32))
+			res := httptest.NewRecorder()
+			Handler(backend).ServeHTTP(res, req)
+			expected := http.StatusUnauthorized
+			if outage {
+				expected = http.StatusInternalServerError
+			}
+			if res.Code != expected {
+				t.Fatalf("got %d, want %d", res.Code, expected)
 			}
 		})
 	}

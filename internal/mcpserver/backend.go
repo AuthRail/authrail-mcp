@@ -21,7 +21,7 @@ const Scope = "workspace.read"
 // GovernanceScope permits governance reads, subject to the user’s domain permissions.
 const GovernanceScope = "governance.read"
 
-// ConnectionsScope permits saved Connection status reads with the user’s permission.
+// ConnectionsScope permits business, Custom MCP and A2A account reads with the user’s permission.
 const ConnectionsScope = "connections.read"
 const maxResponse = 64 << 10
 
@@ -29,6 +29,7 @@ type traceContextKey struct{}
 
 var tracePattern = regexp.MustCompile(`^00-[0-9a-f]{32}-[0-9a-f]{16}-[0-9a-f]{2}$`)
 var errBackend = errors.New("AuthRail could not complete this request; reconnect or try again")
+var errInvalidAccessToken = errors.New("The assistant access token is inactive or expired")
 
 // Config holds the API and public MCP addresses supplied by the deployment.
 // We require HTTPS unless local HTTP has been explicitly enabled.
@@ -194,14 +195,14 @@ func (b *Backend) Ready(ctx context.Context) bool {
 func (b *Backend) Introspect(ctx context.Context, token string) (Identity, error) {
 	var identity Identity
 	if len(token) < 20 || len(token) > 8192 {
-		return identity, errBackend
+		return identity, errInvalidAccessToken
 	}
 	err := b.call(ctx, http.MethodPost, "/auth/mcp/introspect", b.serviceToken, "", map[string]string{"token": token}, &identity)
 	if err != nil {
 		return Identity{}, err
 	}
 	if !identity.Active || identity.UserID == "" || identity.SessionID == "" || identity.OrganisationID == "" || identity.ClientID == "" || !identity.ExpiresAt.After(time.Now()) {
-		return Identity{}, errBackend
+		return Identity{}, errInvalidAccessToken
 	}
 	return identity, nil
 }
@@ -242,4 +243,45 @@ func sameScopes(a, b []string) bool {
 		}
 	}
 	return slices.Contains(a, Scope)
+}
+
+// AuthorizationMetadata supports clients that discover the issuer at the MCP origin.
+// Fetch only our fixed private API path; never forward caller tokens or headers.
+func (b *Backend) AuthorizationMetadata(ctx context.Context) (map[string]any, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, b.origin+"/.well-known/oauth-authorization-server/auth", nil)
+	if err != nil {
+		return nil, errBackend
+	}
+	req.Header.Set("Accept", "application/json")
+	response, err := b.client.Do(req)
+	if err != nil {
+		return nil, errBackend
+	}
+	defer response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		return nil, errBackend
+	}
+	data, err := io.ReadAll(io.LimitReader(response.Body, (64<<10)+1))
+	if err != nil || len(data) > 64<<10 {
+		return nil, errBackend
+	}
+	var document map[string]any
+	if json.Unmarshal(data, &document) != nil || document["issuer"] != b.issuer {
+		return nil, errBackend
+	}
+	// Keep the configured issuer and exact owned OAuth endpoints, including during discovery fallback.
+	for _, endpoint := range []struct{ key, path string }{
+		{"authorization_endpoint", "/oauth2/authorize"}, {"token_endpoint", "/oauth2/token"},
+		{"registration_endpoint", "/oauth2/register"}, {"introspection_endpoint", "/oauth2/introspect"},
+		{"revocation_endpoint", "/oauth2/revoke"},
+	} {
+		value, present := document[endpoint.key]
+		if !present && endpoint.key != "authorization_endpoint" && endpoint.key != "token_endpoint" {
+			continue
+		}
+		if value != b.issuer+endpoint.path {
+			return nil, errBackend
+		}
+	}
+	return document, nil
 }

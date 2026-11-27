@@ -29,6 +29,12 @@ flowchart LR
 | Local protected connector | Reviewed business-tool bindings, execution through the Go SDK and private recovery state |
 | Sidecar | Published Rail verification and request/result evaluation |
 
+The MCP origin also serves authorization-server discovery for clients that fall
+back to same-origin metadata during app refresh. It fetches one fixed API metadata
+path without forwarding caller credentials, bounds the response, refuses redirects
+and verifies the configured issuer and OAuth endpoints. The API remains the sole
+authorization server; MCP resource identity and consent do not change.
+
 ## An assistant request
 
 The assistant signs in and receives an OAuth token bound to one organisation and
@@ -62,6 +68,10 @@ path or trailing slash. HTTP requests use `/` and metadata uses
 `/.well-known/oauth-protected-resource`. Old `/mcp` grants remain distinct and
 require reconnection; no token or consent is silently migrated.
 
+MCP initialization supplies AuthRail's name, website and canonical brand icon, plus
+workflow instructions for supported provider accounts, Custom MCP, secure human
+handoffs and governed execution. Client rendering of those fields is client-owned.
+
 Account management has separate `connections.manage` consent. The assistant
 can find provider setup options and request a fixed AuthRail browser link.
 The API checks live account-management permission; the person signs in and
@@ -93,6 +103,11 @@ tokens and rotating refresh tokens. It supports registered clients, HTTPS client
 metadata and bounded dynamic registration. Client registration does not grant
 organisation access. Provider records live in PostgreSQL; one-use authentication
 state uses Redis. Stored access tokens are hashed.
+
+Protected-resource discovery advertises `offline_access`; the assistant must
+request it and the user must consent before the API issues refresh tokens.
+An unavailable introspection backend produces a server error, not an invalid-token
+response. Confirmed inactive or expired tokens still produce an authentication error.
 
 Delegations expire within one minute and do not outlive the source grant. They
 are not browser or Runtime deployment credentials. Requests validate the listener
@@ -144,8 +159,9 @@ before continuation. A customer executor follows its own saved-request contract.
 
 Reads use bounded projections and exact-version audience checks. Verification
 history retains its Control or scoped Implementation owner. Missing, stale,
-restricted or recalculating assessments remain unavailable. Connection health
-reads use saved collection status and do not call providers. Tokens, provider
+restricted or recalculating assessments remain unavailable. Existing collection
+proof history stays within compliance verification; account setup and discovery
+use business providers, Custom MCP and A2A. Tokens, provider
 credentials, private assertions and application approval material are excluded
 from ordinary tool results.
 

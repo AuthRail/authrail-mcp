@@ -11,6 +11,15 @@ Receive authenticated Streamable HTTP requests using the same exact endpoint.
 Read OAuth protected-resource metadata.
 `GET /.well-known/oauth-protected-resource`
 
+Advertises `offline_access` alongside workspace capabilities so assistants can
+request renewable access. The initial request without an Authorization header
+receives a Bearer challenge requesting `workspace.read offline_access`. Existing
+valid access tokens need only their granted workspace capabilities. Renewal still
+requires the assistant to request `offline_access` and the person to consent.
+
+Read the configured authorization server metadata through the MCP origin for clients using same-origin discovery fallback.
+`GET /.well-known/oauth-authorization-server`
+
 Check process liveness.
 `GET /health/live`
 
@@ -254,12 +263,6 @@ Request cancellation at the current revision. A dispatched effect cannot be undo
 
 ### Accounts — `connections.read`
 
-List provider Connections and their saved health.
-`authrail_list_connections`
-
-Read one provider Connection’s saved status.
-`authrail_get_connection_status`
-
 List saved customer MCP connections without contacting their servers.
 `authrail_list_custom_connections`
 
@@ -289,13 +292,6 @@ Connecting accepts an optional bounded draft of non-secret account details and
 requested permissions. Credentials and the final human action stay on the
 authenticated AuthRail page; preparation never connects or authorises an account.
 `authrail_manage_business_account`
-
-
-Find available provider setup options and exact definition versions.
-`authrail_list_connection_providers`
-
-Open a secure page for a person to connect, reconnect or disconnect an account.
-`authrail_manage_connection`
 
 Open secure human setup, tool review, refresh or disconnection for a customer MCP server.
 `authrail_manage_custom_connection`
@@ -662,6 +658,12 @@ accepted compliance Evidence. Attestations establish saved-record integrity only
 List summaries within current Activity and Inventory audiences; full outcome
 text is available through the exact record read.
 `authrail_list_activity_records`
+
+Optional `source=assistant` lists your own authorised assistant reads, setup requests
+and processed management requests in the workspace. No private arguments or
+command outcomes are returned. `source=records` (the default) retains manual,
+imported and governed Action records; its existing filters do not apply to the
+assistant source.
 
 Read current record overview and its exact revision reference.
 `authrail_get_activity_record`

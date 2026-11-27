@@ -99,9 +99,9 @@ stay on the authenticated page. Connecting an account does not grant every
 assistant permission to use its tools. Changing access withdraws the old tool
 review; disconnecting stops new use and retains history.
 
-Collection integrations remain available separately. Access granted to collect
-information does not authorise business writes. Each provider has its own account setup, permissions and credential requirements.
-Complete that setup before connecting the account.
+The account workflow uses the selected business providers, Custom MCP servers and
+A2A agents. Saved compliance evidence and monitoring history remain available
+through compliance tools; collecting information never authorises business writes.
 
 ## Request a business action
 
@@ -178,8 +178,8 @@ review; an older proposal cannot authorise a different version.
 Compliance tools let you follow a Framework assessment through its
 Controls, Tests and Evidence. Ask, “Which duties need attention, and what supports
 this assessment?” Results respect your visibility and explain unavailable or
-stale records. A healthy collection connection does not establish a passing Test
-or a ready Framework.
+stale records. Evidence collection alone does not establish a passing Test or a
+ready Framework.
 
 Choose only the consent needed for your work:
 

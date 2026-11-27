@@ -33,6 +33,7 @@ func TestInventoryActivityNamedWorkflows(t *testing.T) {
 		{"authrail_change_ai_inventory_lifecycle", InventoryManageScope, http.MethodPost, "/organisation/mcp/inventory/" + item + "/lifecycle", map[string]any{"itemId": item, "idempotencyKey": key, "revision": 7, "currentLifecycle": "active", "lifecycle": "inactive"}},
 		{"authrail_review_ai_inventory_item", InventoryManageScope, http.MethodPost, "/organisation/mcp/inventory/" + item + "/review", map[string]any{"itemId": item, "revision": 7, "action": "confirm"}},
 		{"authrail_list_activity_records", ActivityReadScope, http.MethodGet, "/organisation/mcp/activity?limit=3", map[string]any{"limit": 3}},
+		{"authrail_list_activity_records", ActivityReadScope, http.MethodGet, "/organisation/mcp/activity?limit=3&source=assistant", map[string]any{"limit": 3, "source": "assistant"}},
 		{"authrail_get_activity_record", ActivityReadScope, http.MethodGet, "/organisation/mcp/activity/" + item, map[string]any{"activityId": item}},
 		{"authrail_get_activity_revision", ActivityReadScope, http.MethodGet, "/organisation/mcp/activity/" + item + "/revisions/" + version + "?", map[string]any{"activityId": item, "revisionId": version}},
 		{"authrail_get_activity_history", ActivityReadScope, http.MethodGet, "/organisation/mcp/activity/" + item + "/history?limit=10", map[string]any{"activityId": item, "limit": 10}},
@@ -69,7 +70,7 @@ func TestInventoryActivityNamedWorkflows(t *testing.T) {
 				tool := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 				found := false
 				for _, entry := range cases {
-					if entry.name != tool {
+					if entry.name != tool || entry.path != r.URL.RequestURI() {
 						continue
 					}
 					found = true

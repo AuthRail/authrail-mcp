@@ -30,6 +30,7 @@ type activityFields struct {
 	EvidenceReferences []activityEvidenceReference `json:"evidenceReferences" jsonschema:"Up to20 permitted Evidence package references, never files"`
 }
 type activityListInput struct {
+	Source          string `json:"source,omitempty" jsonschema:"Use assistant for your assistant reads and retained AuthRail management commands; records (default) for governed Action and manual/imported records"`
 	Query           string `json:"query,omitempty"`
 	InventoryItemID string `json:"inventoryItemId,omitempty"`
 	RuntimeActionID string `json:"runtimeActionId,omitempty"`
@@ -92,7 +93,13 @@ func activityPage(q url.Values, cursor string, limit int) (string, error) {
 	return workspacePage(q, workspacePageInput{Cursor: cursor, Limit: limit})
 }
 func addActivityReadTools(server *mcp.Server, backend *Backend) {
-	addWorkspaceTool(server, backend, delegatedToolInput[activityListInput]{name: "authrail_list_activity_records", description: "Find visible manual, imported and Runtime Activity Records. Decisions, starts, reported outcomes and unknown effects remain distinct. This reads history; it neither executes nor retries business work.", scope: ActivityReadScope, method: http.MethodGet, readonly: true, prepare: func(input activityListInput) (string, any, error) {
+	addWorkspaceTool(server, backend, delegatedToolInput[activityListInput]{name: "authrail_list_activity_records", description: "Read Activity Records. Use source=assistant for your assistant reads, setup requests and retained AuthRail management commands. The default source=records finds visible manual, imported and governed Action records. Authorised reads, processed commands and provider effects remain distinct. This never executes or retries work.", scope: ActivityReadScope, method: http.MethodGet, readonly: true, prepare: func(input activityListInput) (string, any, error) {
+		if input.Source != "" && input.Source != "records" && input.Source != "assistant" {
+			return "", nil, errors.New("Choose assistant or records activity")
+		}
+		if input.Source == "assistant" && (input.Query != "" || input.InventoryItemID != "" || input.RuntimeActionID != "" || input.ActionCategory != "") {
+			return "", nil, errors.New("Assistant activity does not use Action record filters")
+		}
 		if input.Limit > 3 {
 			return "", nil, errors.New("Use an Activity summary page up to3; full outcomes are read by exact detail")
 		}
@@ -100,6 +107,9 @@ func addActivityReadTools(server *mcp.Server, backend *Backend) {
 			return "", nil, errors.New("Use exact returned filter UUIDs")
 		}
 		q := url.Values{}
+		if input.Source != "" {
+			q.Set("source", input.Source)
+		}
 		if input.Query != "" {
 			q.Set("query", input.Query)
 		}

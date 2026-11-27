@@ -139,7 +139,7 @@ func addPolicyRailTools(server *mcp.Server, backend *Backend) {
 		data, err := backend.runtimeDraft(ctx, token, "authrail_list_policy_data_facts", http.MethodGet, "/organisation/mcp/policy-rails/data-facts?"+q.Encode(), nil, identity)
 		return nil, data, err
 	})
-	mcp.AddTool(server, &mcp.Tool{Name: "authrail_propose_policy_rail", Description: "Suggest unsaved business rules from an exact published Policy and reviewed action, with optional exact Data Rail facts. Inspect source excerpts, conditions and unresolved questions before saving a draft. Contextual AI is optional and AuthRail-operated. Suggestions cannot publish rules or execute an action."}, func(ctx context.Context, _ *mcp.CallToolRequest, input policyRailProposalInput) (*mcp.CallToolResult, map[string]any, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "authrail_propose_policy_rail", Description: "Optionally suggest unsaved business rules from an exact published Policy and reviewed action, with optional exact Data Rail facts. A proposal is not a saved Rail. Inspect excerpts and actual unresolved business choices, then save valid rules and examples and test the exact saved revision when authorised. A proposal failure does not establish missing Policy requirements; read the source and action contract before naming a blocker. Contextual AI is optional and AuthRail-operated. This cannot publish or execute."}, func(ctx context.Context, _ *mcp.CallToolRequest, input policyRailProposalInput) (*mcp.CallToolResult, map[string]any, error) {
 		if !frameworkID.MatchString(input.OperationVersionID) || !frameworkID.MatchString(input.PolicyVersionID) || len(input.Instructions) > 1000 || len(input.FactBindings) > 16 {
 			return nil, nil, errors.New("Select exact source versions and bounded proposal guidance")
 		}
@@ -156,7 +156,7 @@ func addPolicyRailTools(server *mcp.Server, backend *Backend) {
 		data, err := backend.runtimeDraft(ctx, token, "authrail_propose_policy_rail", http.MethodPost, "/organisation/mcp/policy-rails/proposals", input, identity)
 		return nil, data, err
 	})
-	mcp.AddTool(server, &mcp.Tool{Name: "authrail_continue_policy_rail_draft", Description: "Start or recover the existing unpublished draft for a Policy Rail under current access. Copy an exact published version only when its Policy and action sources are unchanged. Changed sources require new rules and examples. Re-read the returned draft before saving; this never changes a published version."}, func(ctx context.Context, _ *mcp.CallToolRequest, input continuePolicyRailInput) (*mcp.CallToolResult, map[string]any, error) {
+	mcp.AddTool(server, &mcp.Tool{Name: "authrail_continue_policy_rail_draft", Description: "Reuse the existing unpublished draft for a Policy Rail under current access before creating another. Copy an exact published version only when its Policy and action sources are unchanged. Changed sources require new rules and examples. Re-read the returned draft before saving; this never changes a published version."}, func(ctx context.Context, _ *mcp.CallToolRequest, input continuePolicyRailInput) (*mcp.CallToolResult, map[string]any, error) {
 		if !frameworkID.MatchString(input.RailID) || !frameworkID.MatchString(input.OperationVersionID) || !frameworkID.MatchString(input.PolicyVersionID) || input.BasedOnVersionID != "" && !frameworkID.MatchString(input.BasedOnVersionID) {
 			return nil, nil, errors.New("Use the exact Policy Rail and source version IDs")
 		}

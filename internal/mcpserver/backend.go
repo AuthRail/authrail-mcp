@@ -152,6 +152,22 @@ func (b *Backend) call(ctx context.Context, method, path, bearer, org string, in
 	if res.StatusCode == http.StatusConflict {
 		return errors.New("The record changed or is not ready for this task; read and review its latest revision before retrying")
 	}
+	if res.StatusCode == http.StatusServiceUnavailable && path == "/organisation/mcp/policy-rails/proposals" {
+		// Only fixed domain codes cross this boundary; never forward provider errors or payloads.
+		var failure struct {
+			Code string `json:"code"`
+		}
+		if json.NewDecoder(io.LimitReader(res.Body, 4096)).Decode(&failure) == nil {
+			switch failure.Code {
+			case "rail_proposal_invalid":
+				return errors.New("The generated Rail rules did not pass validation. No draft was changed; review the exact action fields and retry the proposal")
+			case "rail_proposal_unavailable":
+				return errors.New("AuthRail's Rail proposal service is temporarily unavailable. Your saved draft is unchanged; retry the proposal without reconnecting")
+			case "rail_proposal_input_limit":
+				return errors.New("The selected Policy or action exceeds the proposal limits. Select fewer sections or fields; your saved draft is unchanged")
+			}
+		}
+	}
 	if res.StatusCode < 200 || res.StatusCode >= 300 {
 		return errBackend
 	}

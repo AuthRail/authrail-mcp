@@ -304,10 +304,18 @@ disconnect confirmation happen in the authenticated application.
 
 ### Actions and Rails — `runtime.drafts`
 
+Rail preparation supports saving valid rules and examples, testing the exact saved
+revision and returning its human review link. Suggestions are optional and unsaved.
+Existing drafts can be read and continued. Guard and Data Rails do not require a
+Policy; Policy Rails require an exact published Policy source. All-action requests
+must continue through every returned catalogue page. Tool guidance assists the
+caller; it does not guarantee a particular assistant's choices or publish rules.
+
 Read protected MCP connector setup guidance.
 `authrail_get_protected_mcp_setup`
 
-List connected action contracts.
+List connected action summaries and exact version references. Continue with the
+returned `nextAfterId` while `hasMore` is true; read a selected action for its contract.
 `authrail_list_connected_actions`
 
 Read an action and its exact versions.

@@ -63,7 +63,7 @@ func addRuntimeDraftTools(server *mcp.Server, backend *Backend) {
 			data, err := backend.runtimeDraft(ctx, token, "authrail_list_guard_protections", http.MethodGet, "/organisation/mcp/rails/guard-protections", nil, identity)
 			return nil, data, err
 		})
-	mcp.AddTool(server, &mcp.Tool{Name: "authrail_list_connected_actions", Description: "Find connected actions in your workspace before preparing a contextual Rail. Read the selected action to choose its exact reviewed Operation Version and permitted fields. This does not connect a provider or intercept a function.", Annotations: annotations},
+	mcp.AddTool(server, &mcp.Tool{Name: "authrail_list_connected_actions", Description: "Find connected actions before preparing a Rail. For all-action requests, pass nextAfterId as afterId while hasMore is true until every page is read; page size does not limit supported actions. Read each selected action for its exact reviewed version and permitted fields. This does not connect a provider or intercept a function.", Annotations: annotations},
 		func(ctx context.Context, _ *mcp.CallToolRequest, input connectedActionListInput) (*mcp.CallToolResult, map[string]any, error) {
 			if input.Limit < 0 || input.Limit > 50 || input.AfterID != "" && !frameworkID.MatchString(input.AfterID) {
 				return nil, nil, errors.New("Use a page size from 1 to 50 and the last action ID")
@@ -80,7 +80,7 @@ func addRuntimeDraftTools(server *mcp.Server, backend *Backend) {
 			data, err := backend.runtimeDraft(ctx, token, "authrail_list_connected_actions", http.MethodGet, "/organisation/mcp/rails/actions?"+query.Encode(), nil, identity)
 			return nil, data, err
 		})
-	mcp.AddTool(server, &mcp.Tool{Name: "authrail_get_connected_action", Description: "Read one connected action's versions and field contract. Select the reviewed version, not a draft or the parent action ID, when preparing a Rail.", Annotations: annotations},
+	mcp.AddTool(server, &mcp.Tool{Name: "authrail_get_connected_action", Description: "Read one connected action's versions and field contract. Select its reviewed version when preparing a Rail. Contract defaults and IDs describe the action, not additional Policy requirements; use only supported fields and conditions.", Annotations: annotations},
 		func(ctx context.Context, _ *mcp.CallToolRequest, input connectedActionInput) (*mcp.CallToolResult, map[string]any, error) {
 			if !frameworkID.MatchString(input.OperationID) {
 				return nil, nil, errors.New("Use the connected action ID")
@@ -99,7 +99,7 @@ func addRuntimeDraftTools(server *mcp.Server, backend *Backend) {
 			return nil, data, err
 		})
 
-	mcp.AddTool(server, &mcp.Tool{Name: "authrail_propose_contextual_rail", Description: "Prepare an unsaved Rail with AuthRail Contextual AI enabled when the rule needs interpretation. AuthRail derives the assessment; users do not configure a model. Review the question and permitted fields. AuthRail interprets the material and the local sidecar applies the published rule; uncertainty is never permission. This tool does not save or publish."},
+	mcp.AddTool(server, &mcp.Tool{Name: "authrail_propose_contextual_rail", Description: "Optionally prepare an unsaved Rail with AuthRail Contextual AI enabled when the rule needs interpretation. Guard Rails do not require a Policy; Policy Rails require an exact published Policy source. AuthRail derives the assessment; users do not configure a model. Review the question and permitted fields. AuthRail interprets the material and the local sidecar applies the published rule; uncertainty is never permission. When authorised, continue by saving valid rules and examples and testing the exact saved revision; this proposal does not save or publish."},
 		func(ctx context.Context, _ *mcp.CallToolRequest, input contextualProposalInput) (*mcp.CallToolResult, map[string]any, error) {
 			if input.Kind != "guard" && input.Kind != "policy" || !frameworkID.MatchString(input.OperationVersionID) ||
 				len(strings.TrimSpace(input.Instructions)) < 10 || len(input.Instructions) > 1000 ||
@@ -111,7 +111,7 @@ func addRuntimeDraftTools(server *mcp.Server, backend *Backend) {
 			return nil, data, err
 		})
 	for _, kind := range []string{"guard", "policy"} {
-		mcp.AddTool(server, &mcp.Tool{Name: "authrail_create_" + kind + "_rail_draft", Description: "Create an unpublished " + kind + " Rail draft using your workspace permissions. Reuse the UUID key for identical creation retries. Save the prepared rules and contextual assessment, test them, then ask a person to review publication in AuthRail. This tool cannot activate or publish a Rail."},
+		mcp.AddTool(server, &mcp.Tool{Name: "authrail_create_" + kind + "_rail_draft", Description: "Create an unpublished " + kind + " Rail draft only after checking for an existing matching draft. Guard Rails need no Policy; Policy Rails need an exact published Policy version. Reuse the UUID key for identical creation retries. Save the prepared rules and contextual assessment, test them, then ask a person to review publication in AuthRail. This tool cannot activate or publish a Rail."},
 			func(ctx context.Context, _ *mcp.CallToolRequest, input createRailInput) (*mcp.CallToolResult, map[string]any, error) {
 				if !frameworkID.MatchString(input.OperationVersionID) || !frameworkID.MatchString(input.IdempotencyKey) || strings.TrimSpace(input.Name) == "" || len(input.Name) > 180 || kind == "policy" && !frameworkID.MatchString(input.PolicyVersionID) {
 					return nil, nil, errors.New("Supply a Rail name, exact reviewed action, UUID creation key and any required Policy version")
@@ -171,7 +171,7 @@ func (b *Backend) delegatedCall(ctx context.Context, token, tool, method, path, 
 		ReviewURL      string         `json:"reviewUrl"`
 	}
 	timeout := 10 * time.Second
-	if tool == "authrail_propose_contextual_rail" {
+	if tool == "authrail_propose_contextual_rail" || tool == "authrail_propose_policy_rail" {
 		timeout = 25 * time.Second
 	}
 	if err := b.call(ctx, method, path, delegation.AccessToken, identity.OrganisationID, input, &result, timeout); err != nil {
